@@ -1,7 +1,6 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::debug;
-use tokio::io::{AsyncReadExt, BufReader};
-use tokio::net::tcp::{OwnedReadHalf};
+use tokio::io::{AsyncReadExt};
 use crate::error::PingError;
 
 const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;

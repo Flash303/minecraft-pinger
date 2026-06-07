@@ -11,7 +11,7 @@ use bytes::{BufMut, BytesMut};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::Resolver;
 use log::debug;
-use tokio::io::{AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncWriteExt, BufReader};
 use crate::utils::dns::{resolve_to_addr};
 use tokio::net::{TcpStream};
 use tokio::time::timeout;
@@ -82,7 +82,7 @@ impl MinecraftPinger {
             })?;
 
         stream.set_nodelay(true).unwrap_or_default();
-        
+
         debug!("Stream connected to {}", addr);
 
         let mut merged_packets = BytesMut::new();
