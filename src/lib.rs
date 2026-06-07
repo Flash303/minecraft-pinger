@@ -65,7 +65,7 @@ impl MinecraftPinger {
     }
 
     async fn ping_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<PingResponse, PingError> {
-        println!("Pinging server {}:{}", ip, port);
+        debug!("Pinging server {}:{}", ip, port);
 
         let addr = resolve_to_addr(self, ip, port).await?;
 
