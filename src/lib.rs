@@ -70,7 +70,7 @@ impl MinecraftPinger {
         let addr = resolve_to_addr(self, ip, port).await?;
 
         let stream_future = TcpStream::connect(addr);
-        let stream = timeout(Duration::from_secs(1), stream_future)
+        let mut stream = timeout(Duration::from_secs(1), stream_future)
             .await
             .map_err(|_| {
                 debug!("Connection timeout error");
@@ -82,25 +82,19 @@ impl MinecraftPinger {
             })?;
 
         stream.set_nodelay(true).unwrap_or_default();
-
-        let (reader, writer) = stream.into_split();
-        let mut buffered_reader = BufReader::new(reader);
-        let mut buffered_writer = BufWriter::new(writer);
-
+        
         debug!("Stream connected to {}", addr);
 
         let mut merged_packets = BytesMut::new();
         merged_packets.put(create_ping_handshake(&config.hostname.as_deref().unwrap_or(ip).to_string(), &port, &config.protocol_version));
         merged_packets.put(create_ping_request());
 
-        buffered_writer.write_all(&merged_packets.freeze())
-            .await
-            .map_err(|_| PingError::SendPacketError)?;
-        buffered_writer.flush()
+        stream.write_all(&merged_packets.freeze())
             .await
             .map_err(|_| PingError::SendPacketError)?;
         debug!("Stream all packets !");
 
+        let mut buffered_reader = BufReader::new(&mut stream);
         let mut packet = read_packet(&mut buffered_reader).await?;
         debug!("Received Packet ID: {}", packet.id());
 

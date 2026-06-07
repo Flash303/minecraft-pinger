@@ -89,7 +89,7 @@ impl Packet {
     }
 }
 
-pub async fn read_packet(stream: &mut BufReader<OwnedReadHalf>) -> Result<Packet, PingError> {
+pub async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Packet, PingError> {
     // Lire le varint de longueur directement depuis le stream bufferisé
     let mut length: i32 = 0;
     let mut shift = 0;
