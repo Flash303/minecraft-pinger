@@ -12,8 +12,8 @@ use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::Resolver;
 use log::debug;
 use tokio::io::{AsyncWriteExt, BufReader, BufWriter};
-use crate::utils::dns::resolve_srv;
-use tokio::net::{lookup_host, TcpStream};
+use crate::utils::dns::{resolve_to_addr};
+use tokio::net::{TcpStream};
 use tokio::time::timeout;
 
 pub struct PingConfig {
@@ -67,17 +67,7 @@ impl MinecraftPinger {
     async fn ping_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<PingResponse, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
-        let (target_ip, target_port) = resolve_srv(self, ip, port).await;
-        let addr_str = format!("{}:{}", target_ip, target_port);
-
-        let addr = lookup_host(&addr_str)
-            .await
-            .map_err(|e| {
-                debug!("First address resolve error: {}", e);
-                PingError::AddressParseError
-            })?
-            .next()
-            .ok_or(PingError::AddressParseError)?;
+        let addr = resolve_to_addr(self, ip, port).await?;
 
         let stream_future = TcpStream::connect(addr);
         let stream = timeout(Duration::from_secs(1), stream_future)

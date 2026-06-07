@@ -1,25 +1,33 @@
-use crate::MinecraftPinger;
+use std::net::{IpAddr, SocketAddr};
 use hickory_resolver::proto::rr::RData;
-use std::net::IpAddr;
+use crate::MinecraftPinger;
+use crate::error::PingError;
 
-pub async fn resolve_srv(pinger: &MinecraftPinger, ip: &str, default_port: u16) -> (String, u16) {
-    if ip.parse::<IpAddr>().is_ok() {
-        return (ip.to_string(), default_port);
+pub async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, default_port: u16) -> Result<SocketAddr, PingError> {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Ok(SocketAddr::new(ip, default_port));
     }
 
-    let srv_record = format!("_minecraft._tcp.{}", ip);
-
+    let srv_record = format!("_minecraft._tcp.{}", host);
     if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
         for record in lookup.answers() {
             if let RData::SRV(srv) = &record.data {
                 let target = srv.target.to_string();
                 let clean_target = target.trim_end_matches('.').to_string();
 
-                return (clean_target, srv.port);
+                if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(clean_target).await {
+                    if let Some(ip) = ip_lookup.iter().next() {
+                        return Ok(SocketAddr::new(ip, srv.port));
+                    }
+                }
             }
         }
     }
 
     // Fallback
-    (ip.to_string(), default_port)
+    let ip_lookup = pinger.dns_resolver.lookup_ip(host).await
+        .map_err(|_| PingError::AddressParseError)?;
+    
+    let ip = ip_lookup.iter().next().ok_or(PingError::AddressParseError)?;
+    Ok(SocketAddr::new(ip, default_port))
 }
