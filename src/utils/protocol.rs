@@ -4,9 +4,13 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::net::tcp::{OwnedReadHalf};
 use crate::error::PingError;
 
+const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;
+const DATA_MASK: u8 = 0x7F;
+const CONTINUATION_BIT: u8 = 0x80;
+
 pub fn write_var_int(buffer: &mut BytesMut, x: i32) {
     let mut ux = x as u32; // cast en u32 pour le logical shift
-    while (ux & 0xFFFFFF80) != 0 {
+    while (ux & NEXT_BYTE_MASK) != 0 {
         buffer.put_u8((ux as u8 & 0x7F) | 0x80);
         ux >>= 7;
     }
@@ -24,7 +28,7 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     loop {
         let byte = buf.try_get_u8()
             .map_err(|_| PingError::ReadPacketError)?;
-        result |= ((byte & 0x7F) as i32) << shift;
+        result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & 0x80 == 0 {
             break;
         }
@@ -93,8 +97,8 @@ pub async fn read_packet(stream: &mut BufReader<OwnedReadHalf>) -> Result<Packet
         let byte = stream.read_u8()
             .await
             .map_err(|_| PingError::ReadPacketError)?;
-        length |= ((byte & 0x7F) as i32) << shift;
-        if byte & 0x80 == 0 {
+        length |= ((byte & DATA_MASK) as i32) << shift;
+        if byte & CONTINUATION_BIT == 0 {
             break;
         }
         shift += 7;
