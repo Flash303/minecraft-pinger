@@ -47,30 +47,21 @@ pub fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
 }
 
 // Packets
-pub fn create_ping_handshake(hostname: &String, port: &u16, protocol_version: &i32) -> Bytes {
-    let mut handshake = BytesMut::new();
+pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
+    let mut handshake = BytesMut::with_capacity(128);
     handshake.put_u8(0x00);
     write_var_int(&mut handshake, *protocol_version); // protocol version
     write_string(&mut handshake, hostname);
     handshake.put_u16(*port); // Server Port
     write_var_int(&mut handshake, 1); // next state = 1 status
 
-    create_packet_header(handshake.freeze())
+    write_var_int(buffer, handshake.len() as i32);
+    buffer.put(handshake.freeze());
 }
 
-pub fn create_ping_request() -> Bytes {
-    let mut packet = BytesMut::new();
-    write_var_int(&mut packet, 1); // lenght
-    write_var_int(&mut packet, 0x00); // packet id
-    
-    packet.freeze()
-}
-
-fn create_packet_header(packet: Bytes) -> Bytes {
-    let mut data = BytesMut::new();
-    write_var_int(&mut data, packet.len() as i32);
-    data.extend_from_slice(&packet);
-    data.freeze()
+pub fn write_ping_request(buffer: &mut BytesMut) {
+    write_var_int(buffer, 1); // lenght
+    write_var_int(buffer, 0x00); // packet id
 }
 
 pub struct Packet {

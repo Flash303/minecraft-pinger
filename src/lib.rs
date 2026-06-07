@@ -5,9 +5,9 @@ pub mod error;
 use std::sync::Arc;
 use crate::models::model::PingResponse;
 use error::PingError;
-use crate::utils::protocol::{create_ping_handshake, create_ping_request, read_packet, read_string};
+use crate::utils::protocol::{read_packet, read_string, write_ping_handshake, write_ping_request};
 use std::time::Duration;
-use bytes::{BufMut, BytesMut};
+use bytes::{BytesMut};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::Resolver;
 use log::debug;
@@ -65,7 +65,7 @@ impl MinecraftPinger {
     }
 
     async fn ping_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<PingResponse, PingError> {
-        debug!("Pinging server {}:{}", ip, port);
+        println!("Pinging server {}:{}", ip, port);
 
         let addr = resolve_to_addr(self, ip, port).await?;
 
@@ -85,11 +85,13 @@ impl MinecraftPinger {
 
         debug!("Stream connected to {}", addr);
 
-        let mut merged_packets = BytesMut::new();
-        merged_packets.put(create_ping_handshake(&config.hostname.as_deref().unwrap_or(ip).to_string(), &port, &config.protocol_version));
-        merged_packets.put(create_ping_request());
+        let mut buffer = BytesMut::with_capacity(256);
 
-        stream.write_all(&merged_packets.freeze())
+        let handshake_host = config.hostname.as_deref().unwrap_or(ip);
+        write_ping_handshake(&mut buffer, handshake_host, &port, &config.protocol_version);
+        write_ping_request(&mut buffer);
+
+        stream.write_all(&buffer.freeze())
             .await
             .map_err(|_| PingError::SendPacketError)?;
         debug!("Stream all packets !");
