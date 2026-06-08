@@ -60,7 +60,7 @@ pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, p
 }
 
 pub fn write_ping_request(buffer: &mut BytesMut) {
-    write_var_int(buffer, 1); // lenght
+    write_var_int(buffer, 1); // length
     write_var_int(buffer, 0x00); // packet id
 }
 
