@@ -54,7 +54,7 @@ impl MinecraftPinger {
         })
     }
 
-    pub async fn ping_server(self: &Self, ip: &str, port: u16, config: PingConfig) -> Result<PingResponse, PingError> {
+    pub async fn ping_server(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<PingResponse, PingError> {
         match timeout(config.timeout, self.ping_server_internal(ip, port, &config)).await {
             Ok(result) => result,
             Err(_) => {
