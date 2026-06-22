@@ -6,4 +6,5 @@ pub enum PingError {
     SerializationError,
     AddressParseError,
     TimeoutError,
+    ParseResponseError,
 }

@@ -1,6 +1,17 @@
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]
+pub struct JavaPing {
+    pub version: Version,
+    pub players: Players,
+    pub description: Description,
+    pub favicon: Option<String>,
+    #[serde(rename = "modinfo")]
+    pub mod_info: Option<ModInfo>,
+}
+
+// Components
+#[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Description {
     Component(TextComponent),
@@ -19,16 +30,7 @@ pub enum TextComponent {
     String(String),
     Array(Vec<TextComponent>),
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct PingResponse {
-    pub version: Version,
-    pub players: Players,
-    pub description: Description,
-    pub favicon: Option<String>,
-    #[serde(rename = "modinfo")]
-    pub mod_info: Option<ModInfo>,
-}
+// Components end
 
 #[derive(Serialize, Deserialize)]
 pub struct Version {
