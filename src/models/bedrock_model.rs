@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use crate::error::PingError;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(default)]
 pub struct BedrockPing {
     pub edition: String,
     pub motd: String,
