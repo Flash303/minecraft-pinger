@@ -12,9 +12,9 @@ pub struct BedrockPing {
     pub server_id: i64,
     pub map_name: String,
     pub game_mode: String,
-    pub numeric_id: u8,
-    pub port: u16,
-    pub unknown_val: u32,
+    pub numeric_id: Option<u8>,
+    pub port: Option<u16>,
+    pub unknown_val: Option<u32>,
 }
 
 impl TryFrom<String> for BedrockPing {
@@ -24,10 +24,11 @@ impl TryFrom<String> for BedrockPing {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .delimiter(b';')
+            .flexible(true)
             .from_reader(data.as_bytes());
 
         if let Some(result) = reader.deserialize::<BedrockPing>().next() {
-            return Ok(result.unwrap())
+            return result.map_err(|_| PingError::ParseResponseError);
         }
 
         Err(PingError::ParseResponseError)
