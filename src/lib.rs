@@ -83,7 +83,7 @@ impl MinecraftPinger {
         let _ = socket.send(&create_ping()).await;
 
         let mut buffer = [0u8; 1024];
-        let len = timeout(Duration::from_secs(5), socket.recv(&mut buffer))
+        let len = timeout(Duration::from_secs(1), socket.recv(&mut buffer))
             .await
             .map_err(|_| PingError::TimeoutError)?
             .map_err(|_| PingError::ConnectionRefused)?;
