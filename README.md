@@ -5,6 +5,7 @@ A high-performance, asynchronous Rust library for pinging Minecraft servers to r
 ## Features
 
 - **Asynchronous I/O**: Built on top of `tokio` for maximum efficiency.
+- **Java & Bedrock Support**: Supports pinging both Java and Bedrock (MCPE) edition servers.
 - **Optimized Performance**: Uses `BufReader`/`BufWriter` and zero-copy string parsing.
 - **Robust DNS Support**: Full support for SRV record resolution (`_minecraft._tcp`).
 - **Rich Metadata**: Parses MOTD (plain and JSON components), player samples, versions, and ModInfo (Forge/Fabric).
@@ -23,43 +24,61 @@ tokio = { version = "1.0", features = ["full"] }
 ## Quick Start
 
 ```rust
-use minecraft_pinger::{MinecraftPinger, PingConfig};
+use minecraft_pinger::MinecraftPinger;
+use minecraft_pinger::config::{PingConfig, JavaPingConfig};
 use std::time::Duration;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     // 1. Initialize the pinger (manages shared resources like DNS resolver)
-    let pinger = MinecraftPinger::new()
-        .map_err(|e| format!("Failed to init pinger: {}", e))?;
+    let pinger = MinecraftPinger::new().expect("Failed to create pinger");
 
-    // 2. Configure your ping settings (optional)
-    let config = PingConfig {
-        timeout: Duration::from_secs(3),
-        protocol_version: 763, // 1.20.1
-        ..Default::default()
-    };
+    // 2. Configure your ping settings using the Builder pattern
+    let config = PingConfig::builder()
+        .set_timeout(Duration::from_secs(3))
+        .set_java_config(
+            JavaPingConfig::builder()
+                .set_protocol_version(763) // 1.20.1
+                .build()
+        )
+        .build();
 
-    // 3. Ping a server
-    match pinger.ping_server("mc.hypixel.net", 25565, config).await {
+    // 3. Ping a Java server
+    match pinger.ping_java_server("mc.hypixel.net", 25565, &config).await {
         Ok(response) => {
             println!("Server: {}", response.version.name);
             println!("Players: {}/{}", response.players.online, response.players.max);
             println!("MOTD: {}", response.description.to_plain_text());
         }
-        Err(e) => eprintln!("Ping failed: {:?}", e),
+        Err(e) => eprintln!("Java Ping failed: {:?}", e),
     }
-
-    Ok(())
+    
+    // 4. Ping a Bedrock server
+    match pinger.ping_bedrock_server("bedrock.nationsglory.fr", 19132, &config).await {
+        Ok(pong) => {
+            println!("Bedrock Server: {}", pong.motd);
+            println!("Bedrock Players: {}/{}", pong.current_players, pong.max_players);
+        }
+        Err(e) => eprintln!("Bedrock Ping failed: {:?}", e),
+    }
 }
 ```
 
 ## Configuration
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `protocol_version` | `i32` | Protocol ID sent in the handshake. |
-| `timeout` | `Duration` | Maximum time to wait for a response. |
-| `hostname` | `Option<String>` | Override the hostname sent in the handshake (defaults to the IP provided). |
+Configuration is now done using the Builder pattern (`PingConfig::builder()`).
+
+| Builder Method | Type | Description |
+|----------------|------|-------------|
+| `set_timeout` | `Duration` | Maximum time to wait for a response. |
+| `set_java_config` | `JavaPingConfig` | Specific configuration for Java Edition servers. |
+
+### JavaPingConfig
+
+| Builder Method | Type | Description |
+|----------------|------|-------------|
+| `set_protocol_version` | `i32` | Protocol ID sent in the handshake. |
+| `set_hostname` | `Option<String>` | Override the hostname sent in the handshake (defaults to the IP provided). |
 
 ## Error Handling
 
