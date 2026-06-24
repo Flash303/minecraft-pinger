@@ -23,13 +23,39 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = buf.try_get_u8()
-            .map_err(|_| PingError::ReadPacketError)?;
+        let byte = buf.try_get_u8().map_err(|_| PingError::ReadPacketError)?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
         }
         shift += 7;
+
+        // Security
+        if shift >= 35 {
+            return Err(PingError::ReadPacketError);
+        }
+    }
+    Ok(result)
+}
+
+// Todo: work on code duplication
+pub async fn read_var_int_custom<F>(mut extractor: F) -> Result<i32, PingError>
+where F: AsyncFnMut() -> Result<u8, PingError>
+{
+    let mut result = 0i32;
+    let mut shift = 0;
+    loop {
+        let byte = extractor().await?;
+        result |= ((byte & DATA_MASK) as i32) << shift;
+        if byte & CONTINUATION_BIT == 0 {
+            break;
+        }
+        shift += 7;
+
+        // Security
+        if shift >= 35 {
+            return Err(PingError::ReadPacketError);
+        }
     }
     Ok(result)
 }
