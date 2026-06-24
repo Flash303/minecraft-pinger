@@ -2,7 +2,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
 use crate::error::PingError;
-use crate::utils::protocol::{read_var_int, read_var_int_custom, write_string, write_var_int};
+use crate::utils::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
 
 // Packets
 pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
@@ -38,11 +38,7 @@ impl Packet {
 }
 
 pub async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Packet, PingError> {
-    let length = read_var_int_custom(async || {
-        stream.read_u8()
-            .await
-            .map_err(|_| PingError::ReadPacketError)
-    }).await?;
+    let length = read_var_int_stream(stream).await?;
 
     // Lire exactement `length` bytes
     let mut buf = vec![0u8; length as usize];

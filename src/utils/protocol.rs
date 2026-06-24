@@ -39,13 +39,11 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
 }
 
 // Todo: work on code duplication
-pub async fn read_var_int_custom<F>(mut extractor: F) -> Result<i32, PingError>
-where F: AsyncFnMut() -> Result<u8, PingError>
-{
+pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mut R) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = extractor().await?;
+        let byte = stream.read_u8().await.map_err(|_| PingError::ReadPacketError)?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
