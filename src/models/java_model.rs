@@ -24,7 +24,19 @@ pub enum TextComponent {
     Object {
         #[serde(default)]
         text: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        shadow_color: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        atlas: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sprite: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bold: Option<bool>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
         color: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         extra: Option<Vec<TextComponent>>,
     },
     String(String),
