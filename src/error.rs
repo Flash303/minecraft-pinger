@@ -2,7 +2,7 @@
 pub enum PingError {
     ConnectionRefused,
     SendPacketError,
-    ReadPacketError,
+    ReadPacketError(String),
     SerializationError,
     AddressParseError,
     TimeoutError,
