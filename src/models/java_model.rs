@@ -56,7 +56,7 @@ pub struct ModInfo {
     #[serde(rename = "type")]
     pub name: String,
     #[serde(rename = "modList")]
-    pub mod_list: Vec<ModInfo>,
+    pub mod_list: Vec<Mod>,
 }
 
 #[derive(Serialize, Deserialize)]
