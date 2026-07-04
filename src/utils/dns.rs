@@ -12,10 +12,7 @@ pub async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, default_port:
     if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
         for record in lookup.answers() {
             if let RData::SRV(srv) = &record.data {
-                let target = srv.target.to_string();
-                let clean_target = target.trim_end_matches('.').to_string();
-
-                if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(clean_target).await {
+                if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(srv.target.clone()).await {
                     if let Some(ip) = ip_lookup.iter().next() {
                         return Ok(SocketAddr::new(ip, srv.port));
                     }
