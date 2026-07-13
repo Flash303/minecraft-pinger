@@ -106,12 +106,6 @@ impl MinecraftPinger {
         debug!("Received Packet ID: {}", packet.id());
 
         let json = read_string(&mut packet.data)?;
-
-        let json_value = serde_json::from_str::<Value>(json.clone().as_str()).unwrap();
-        info!("Raw : {}", serde_json::to_string(&json_value).unwrap());
-        let string = json_value.get("description").unwrap();
-        // info!("Raw Description : {}", serde_json::to_string(&string).unwrap());
-
         let as_res = serde_json::from_str::<JavaPing>(&json)
             .map_err(|e| {
                 debug!("Error deserializing ping response: {}, json {}", e, json);
