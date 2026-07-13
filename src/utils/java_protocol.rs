@@ -46,7 +46,7 @@ pub async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Pack
         .await
         .map_err(|e| {
             debug!("Read packet error 2 {e}");
-            PingError::ReadPacketError(e.to_string())
+            PingError::ReadPacket(e.to_string())
         })?;
 
     let mut data = Bytes::from(buf);

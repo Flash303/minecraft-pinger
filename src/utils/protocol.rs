@@ -24,7 +24,7 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     let mut shift = 0;
     loop {
         let byte = buf.try_get_u8()
-            .map_err(|e| PingError::ReadPacketError(format!("Read varint length (v1) {}", e.to_string())))?;
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {}", e.to_string())))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
@@ -33,7 +33,7 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
 
         // Security
         if shift >= 35 {
-            return Err(PingError::ReadPacketError("Shift security".to_string()));
+            return Err(PingError::ReadPacket("Shift security".to_string()));
         }
     }
     Ok(result)
@@ -45,7 +45,7 @@ pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mu
     let mut shift = 0;
     loop {
         let byte = stream.read_u8().await
-            .map_err(|e| PingError::ReadPacketError(format!("Read varint length (v2) {}", e.to_string())))?;
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {}", e.to_string())))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
@@ -54,7 +54,7 @@ pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mu
 
         // Security
         if shift >= 35 {
-            return Err(PingError::ReadPacketError("Shift security".to_string()));
+            return Err(PingError::ReadPacket("Shift security".to_string()));
         }
     }
     Ok(result)
@@ -63,11 +63,11 @@ pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mu
 pub fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
-        return Err(PingError::ReadPacketError("Remaining < len".to_string()));
+        return Err(PingError::ReadPacket("Remaining < len".to_string()));
     }
     let bytes = buf.split_to(len);
     String::from_utf8(bytes.into())
-        .map_err(|_| PingError::ReadPacketError("Parse to string error".to_string()))
+        .map_err(|_| PingError::ReadPacket("Parse to string error".to_string()))
 }
 
 #[cfg(test)]

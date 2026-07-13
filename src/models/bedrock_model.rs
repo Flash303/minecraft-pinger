@@ -29,9 +29,9 @@ impl TryFrom<String> for BedrockPing {
             .from_reader(data.as_bytes());
 
         if let Some(result) = reader.deserialize::<BedrockPing>().next() {
-            return result.map_err(|_| PingError::ParseResponseError);
+            return result.map_err(|_| PingError::ParseResponse);
         }
 
-        Err(PingError::ParseResponseError)
+        Err(PingError::ParseResponse)
     }
 }
