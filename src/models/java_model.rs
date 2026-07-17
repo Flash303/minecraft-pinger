@@ -35,6 +35,14 @@ pub enum TextComponent {
         bold: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         strikethrough: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        obfuscated: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        italic: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        underlined: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        font: Option<String>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
         color: Option<String>,
