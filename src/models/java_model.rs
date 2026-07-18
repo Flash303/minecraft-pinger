@@ -8,6 +8,9 @@ pub struct JavaPing {
     pub favicon: Option<String>,
     #[serde(rename = "modinfo")]
     pub mod_info: Option<ModInfo>,
+
+    #[serde(default)]
+    pub latency: u32,
 }
 
 // Components

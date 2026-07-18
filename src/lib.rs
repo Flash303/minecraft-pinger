@@ -2,16 +2,16 @@ pub mod models;
 pub mod utils;
 pub mod error;
 pub mod config;
+pub mod protocol;
 
 use std::sync::Arc;
 use error::PingError;
-use crate::utils::protocol::{read_string};
-use std::time::Duration;
+use protocol::protocol::{read_string};
+use std::time::{Duration, Instant};
 use bytes::{Bytes, BytesMut};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::Resolver;
-use log::{debug, info};
-use serde_json::Value;
+use log::{debug};
 use tokio::io::{AsyncWriteExt, BufReader};
 use crate::utils::dns::{resolve_to_addr};
 use tokio::net::{TcpStream, UdpSocket};
@@ -20,8 +20,8 @@ use crate::config::PingConfig;
 use crate::error::AppError;
 use crate::models::bedrock_model::BedrockPing;
 use crate::models::java_model::JavaPing;
-use crate::utils::bedrock_protocol::{create_ping, read_response};
-use crate::utils::java_protocol::{read_packet, write_ping_handshake, write_ping_request};
+use protocol::bedrock_protocol::{create_ping, read_response};
+use protocol::java_protocol::{read_packet, write_ping_handshake, write_ping_request};
 
 pub struct MinecraftPinger {
     dns_resolver: Arc<Resolver<TokioRuntimeProvider>>,
@@ -51,6 +51,7 @@ impl MinecraftPinger {
         debug!("Pinging bedrock server {}:{}", ip, port);
 
         let addr = resolve_to_addr(self, ip, port).await?;
+        let start_time = Instant::now();
 
         let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
         timeout(Duration::from_secs(1), socket.connect(addr))
@@ -68,7 +69,10 @@ impl MinecraftPinger {
             .map_err(|_| PingError::ConnectionRefused)?;
 
         let mut response_bytes = Bytes::copy_from_slice(&buffer[..len]);
-        let rs = read_response(&mut response_bytes)?;
+        let latency = start_time.elapsed().as_millis() as u32;
+
+        let mut rs = read_response(&mut response_bytes)?;
+        rs.latency = latency;
 
         Ok(rs)
     }
@@ -90,6 +94,8 @@ impl MinecraftPinger {
 
         debug!("Stream connected to {}", addr);
 
+        let start_time = Instant::now();
+
         let mut buffer = BytesMut::with_capacity(256);
 
         let handshake_host = config.java_config().hostname().as_deref().unwrap_or(ip);
@@ -106,11 +112,15 @@ impl MinecraftPinger {
         debug!("Received Packet ID: {}", packet.id());
 
         let json = read_string(&mut packet.data)?;
-        let as_res = serde_json::from_str::<JavaPing>(&json)
+        let latency = start_time.elapsed().as_millis() as u32;
+
+        let mut as_res = serde_json::from_str::<JavaPing>(&json)
             .map_err(|e| {
                 debug!("Error deserializing ping response: {}, json {}", e, json);
                 PingError::Serialization
             })?;
+
+        as_res.latency = latency;
         Ok(as_res)
     }
 }

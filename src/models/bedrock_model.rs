@@ -16,6 +16,8 @@ pub struct BedrockPing {
     pub numeric_id: Option<u8>,
     pub port: Option<u16>,
     pub unknown_val: Option<u32>,
+
+    pub latency: u32,
 }
 
 impl TryFrom<String> for BedrockPing {

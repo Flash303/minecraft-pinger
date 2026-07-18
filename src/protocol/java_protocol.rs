@@ -2,7 +2,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
 use crate::error::PingError;
-use crate::utils::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
+use crate::protocol::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
 
 // Packets
 pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
