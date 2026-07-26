@@ -17,6 +17,7 @@ pub struct BedrockPing {
     pub port: Option<u16>,
     pub unknown_val: Option<u32>,
 
+    #[serde(skip_deserializing)]
     pub latency: u32,
 }
 
