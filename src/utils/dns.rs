@@ -3,12 +3,12 @@ use hickory_resolver::proto::rr::RData;
 use crate::MinecraftPinger;
 use crate::error::PingError;
 
-pub async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, default_port: u16) -> Result<SocketAddr, PingError> {
+pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, default_port: u16, protocol: &str) -> Result<SocketAddr, PingError> {
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(SocketAddr::new(ip, default_port));
     }
 
-    let srv_record = format!("_minecraft._tcp.{}", host);
+    let srv_record = format!("_minecraft._{}.{}", protocol, host);
     if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
         for record in lookup.answers() {
             if let RData::SRV(srv) = &record.data {
