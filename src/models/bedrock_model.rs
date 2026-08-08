@@ -10,7 +10,7 @@ pub struct BedrockPing {
     pub version: String,
     pub current_players: u32,
     pub max_players: u32,
-    pub server_id: i64,
+    pub server_id: String,
     pub map_name: String,
     pub game_mode: String,
     pub numeric_id: Option<u8>,
