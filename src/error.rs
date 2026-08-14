@@ -4,36 +4,39 @@ use tokio::time::error::Elapsed;
 
 #[derive(Debug, Error)]
 pub enum PingError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("Global ping timeout for {0}")]
     Timeout(#[from] Elapsed),
 
-    #[error("ConnectionRefused")]
+    #[error("Connection refused")]
     ConnectionRefused,
     
-    #[error("SendPacket")]
+    #[error("Failed to send packet")]
     SendPacket,
     
-    #[error("ReadPacket: {0}")]
+    #[error("Failed to read packet: {0}")]
     ReadPacket(String),
     
-    #[error("Serialization")]
-    Serialization,
+    #[error("Invalid UTF-8: {0}")]
+    Utf8Error(#[from] std::string::FromUtf8Error),
     
-    #[error("DnsParse")]
-    DnsParse(NetError),
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
     
-    #[error("Dns ip not found")]
-    DnsIpNotFound(),
+    #[error("DNS parse error: {0}")]
+    DnsParse(#[source] NetError),
     
-    #[error("AddressParse")]
-    AddressParse(#[from] NetError),
+    #[error("DNS IP not found")]
+    DnsIpNotFound,
     
-    #[error("ParseResponse")]
+    #[error("Address parse error: {0}")]
+    AddressParse(#[source] NetError),
+    
+    #[error("Failed to parse response")]
     ParseResponse,
-}
 
-#[derive(Debug, Error)]
-pub enum AppError {
-    #[error("DnsResolverError: {0}")]
-    DnsResolverError(#[from] NetError),
+    #[error("Initialization error: {0}")]
+    Init(String),
 }

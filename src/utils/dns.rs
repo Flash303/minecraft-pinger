@@ -25,6 +25,6 @@ pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, defaul
     let ip_lookup = pinger.dns_resolver.lookup_ip(host).await
         .map_err(|e| PingError::DnsParse(e))?;
     
-    let ip = ip_lookup.iter().next().ok_or(PingError::DnsIpNotFound())?;
+    let ip = ip_lookup.iter().next().ok_or(PingError::DnsIpNotFound)?;
     Ok(SocketAddr::new(ip, default_port))
 }

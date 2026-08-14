@@ -17,9 +17,8 @@ use crate::utils::dns::{resolve_to_addr};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::time::timeout;
 use crate::config::PingConfig;
-use crate::error::AppError;
-use crate::models::bedrock_model::BedrockPing;
 use crate::models::java_model::JavaPing;
+use crate::models::bedrock_model::BedrockPing;
 use protocol::bedrock_protocol::{create_ping, read_response};
 use protocol::java_protocol::{read_packet, write_ping_handshake, write_ping_request};
 
@@ -28,21 +27,29 @@ pub struct MinecraftPinger {
 }
 
 impl MinecraftPinger {
-    pub fn new() -> Result<Self, AppError> {
-        let result = Resolver::builder_tokio()?;
-        let result = result.build()?;
+    pub fn new() -> Result<Self, PingError> {
+        let builder = Resolver::builder_tokio()
+            .map_err(|e| PingError::Init(e.to_string()))?;
+        let resolver = builder.build()
+            .map_err(|e| PingError::Init(e.to_string()))?;
 
         Ok(Self {
-            dns_resolver: Arc::new(result)
+            dns_resolver: Arc::new(resolver)
         })
     }
 
-    pub async fn ping_java_server(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<JavaPing, PingError> {
+    pub async fn ping_java_server(self: &Self,
+            ip: &str,
+            port: u16,
+            config: &PingConfig) -> Result<JavaPing, PingError> {
         let rs = timeout(config.timeout(), self.ping_java_server_internal(ip, port, &config)).await??;
         Ok(rs)
     }
 
-    pub async fn ping_bedrock_server(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<BedrockPing, PingError> {
+    pub async fn ping_bedrock_server(self: &Self,
+            ip: &str,
+            port: u16,
+            config: &PingConfig) -> Result<BedrockPing, PingError> {
         let rs = timeout(config.timeout(), self.ping_bedrock_server_internal(ip, port)).await??;
         Ok(rs)
     }
@@ -53,7 +60,7 @@ impl MinecraftPinger {
         let addr = resolve_to_addr(self, ip, port, "udp").await?;
         let start_time = Instant::now();
 
-        let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let socket = UdpSocket::bind("0.0.0.0:0").await?;
         timeout(Duration::from_secs(1), socket.connect(addr))
             .await?
             .map_err(|e| {
@@ -61,7 +68,7 @@ impl MinecraftPinger {
                 PingError::ConnectionRefused
             })?;
 
-        let _ = socket.send(&create_ping()).await;
+        let _ = socket.send(&create_ping()?).await;
 
         let mut buffer = [0u8; 1024];
         let len = timeout(Duration::from_secs(1), socket.recv(&mut buffer))
@@ -114,11 +121,7 @@ impl MinecraftPinger {
         let json = read_string(&mut packet.data)?;
         let latency = start_time.elapsed().as_millis() as u32;
 
-        let mut as_res = serde_json::from_str::<JavaPing>(&json)
-            .map_err(|e| {
-                debug!("Error deserializing ping response: {}, json {}", e, json);
-                PingError::Serialization
-            })?;
+        let mut as_res = serde_json::from_str::<JavaPing>(&json)?;
 
         as_res.latency = latency;
         Ok(as_res)

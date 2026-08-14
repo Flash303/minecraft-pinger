@@ -14,13 +14,16 @@ fn try_split_to(buffer: &mut Bytes, size: usize) -> Option<Bytes> {
     }
 }
 
-pub fn create_ping() -> Bytes {
+pub fn create_ping() -> Result<Bytes, PingError> {
     let mut data = BytesMut::with_capacity(33);
     data.put_u8(0x1);
-    data.put_u64(SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64);
+    
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| PingError::Init("SystemTime before UNIX_EPOCH".into()))?
+        .as_millis() as u64;
+        
+    data.put_u64(time);
     data.put_u128(MAGIC);
 
     let mut guid = [0u8; 8];
@@ -28,7 +31,7 @@ pub fn create_ping() -> Bytes {
 
     data.put_slice(&guid);
 
-    data.freeze()
+    Ok(data.freeze())
 }
 
 pub fn read_response(buffer: &mut Bytes) -> Result<BedrockPing, PingError> {
@@ -51,7 +54,7 @@ pub fn read_response(buffer: &mut Bytes) -> Result<BedrockPing, PingError> {
     let string_data = try_split_to(buffer, string_size as usize)
         .ok_or(PingError::ReadPacket("String data not found".to_string()))?;
 
-    let str = String::from_utf8(string_data.into()).unwrap();
+    let str = String::from_utf8(string_data.into())?;
 
     Ok(str.try_into()?)
 }
