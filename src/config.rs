@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-pub const DEFAULT_PROTOCOL_VERSION: i32 = 763;
+pub const DEFAULT_PROTOCOL_VERSION: i32 = 775;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct PingConfig {
@@ -40,7 +40,7 @@ impl PingConfigBuilder {
             java_config: JavaPingConfig::default()
         }
     }
-    
+
     pub fn set_timeout(mut self, timeout: Duration) -> PingConfigBuilder {
         self.timeout = timeout;
         self
