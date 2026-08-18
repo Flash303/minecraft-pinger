@@ -1,6 +1,8 @@
-use crate::config::DEFAULT_PROTOCOL_VERSION;
+use crate::config::{PingConfig, DEFAULT_PROTOCOL_VERSION, PingConfigBuilder};
 
+#[derive(Clone)]
 pub struct JavaPingConfig {
+    common: PingConfig,
     protocol_version: i32,
     hostname: Option<String>,
 }
@@ -10,8 +12,16 @@ impl JavaPingConfig {
         JavaPingConfigBuilder::new()
     }
 
+    pub fn from(config: &PingConfigBuilder) -> JavaPingConfigBuilder {
+        JavaPingConfigBuilder::from(config)
+    }
+
     pub fn protocol_version(&self) -> i32 {
         self.protocol_version
+    }
+    
+    pub fn common(&self) -> &PingConfig {
+        &self.common
     }
 
     pub fn hostname(&self) -> &Option<String> {
@@ -26,6 +36,7 @@ impl Default for JavaPingConfig {
 }
 
 pub struct JavaPingConfigBuilder {
+    common: PingConfigBuilder,
     protocol_version: i32,
     hostname: Option<String>,
 }
@@ -33,6 +44,15 @@ pub struct JavaPingConfigBuilder {
 impl JavaPingConfigBuilder {
     pub fn new() -> Self {
         JavaPingConfigBuilder {
+            common: PingConfigBuilder::new(),
+            protocol_version: DEFAULT_PROTOCOL_VERSION,
+            hostname: None
+        }
+    }
+
+    pub fn from(config: &PingConfigBuilder) -> Self {
+        JavaPingConfigBuilder {
+            common: config.clone(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None
         }
@@ -50,6 +70,7 @@ impl JavaPingConfigBuilder {
 
     pub fn build(self) -> JavaPingConfig {
         JavaPingConfig {
+            common: self.common.build(),
             hostname: self.hostname,
             protocol_version: self.protocol_version
         }
