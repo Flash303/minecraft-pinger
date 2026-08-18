@@ -3,6 +3,12 @@ name = "minecraft-pinger"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["java", "bedrock"]
+
+bedrock = []
+java = []
+
 [dependencies]
 tokio = { version = "1.52.3", features = ["full"] }
 serde = { version = "1.0.228", features = ["derive"] }

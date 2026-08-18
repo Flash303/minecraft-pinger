@@ -5,8 +5,8 @@ pub const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;
 pub const CONTINUATION_BIT: u8 = 0x80;
 pub const DATA_MASK: u8 = 0x7F;
 
-pub fn write_var_int(buffer: &mut BytesMut, x: i32) {
-    let mut ux = x as u32; // cast en u32 pour le logical shift
+pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
+    let mut ux = x as u32; // cast to u32 for logical shift
     while (ux & NEXT_BYTE_MASK) != 0 {
         buffer.put_u8((ux as u8 & DATA_MASK) | CONTINUATION_BIT); // (ux as u8 & DATA_MASK) get the 7 bits of data, | CONTINUATION_BIT set the continuation to 1
         ux >>= 7; // remove the 7 bits
@@ -14,12 +14,12 @@ pub fn write_var_int(buffer: &mut BytesMut, x: i32) {
     buffer.put_u8(ux as u8); // put the last, often 0x000..
 }
 
-pub fn write_string(buffer: &mut BytesMut, string: &str) {
+pub(crate) fn write_string(buffer: &mut BytesMut, string: &str) {
     write_var_int(buffer, string.len() as i32);
     buffer.put_slice(string.as_bytes());
 }
 
-pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
+pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
@@ -39,8 +39,8 @@ pub fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     Ok(result)
 }
 
-// Todo: work on code duplication
-pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mut R) -> Result<i32, PingError> {
+// Todo: work on code duplication with read_var_int
+pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mut R) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
@@ -60,7 +60,7 @@ pub async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mu
     Ok(result)
 }
 
-pub fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
+pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
         return Err(PingError::ReadPacket("Remaining < len".to_string()));

@@ -1,11 +1,11 @@
+use crate::common::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
+use crate::error::PingError;
 use bytes::{BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
-use crate::error::PingError;
-use crate::protocol::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
 
 // Packets
-pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
+pub(crate) fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
     let mut handshake = BytesMut::with_capacity(128);
     handshake.put_u8(0x00);
     write_var_int(&mut handshake, *protocol_version); // protocol version
@@ -17,12 +17,12 @@ pub fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, p
     buffer.put(handshake.freeze());
 }
 
-pub fn write_ping_request(buffer: &mut BytesMut) {
+pub(crate) fn write_ping_request(buffer: &mut BytesMut) {
     write_var_int(buffer, 1); // length
     write_var_int(buffer, 0x00); // packet id
 }
 
-pub struct Packet {
+pub(crate) struct Packet {
     id: u8,
     pub data: Bytes,
 }
@@ -37,7 +37,7 @@ impl Packet {
     }
 }
 
-pub async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Packet, PingError> {
+pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Packet, PingError> {
     let length = read_var_int_stream(stream).await?;
 
     // Lire exactement `length` bytes

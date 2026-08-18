@@ -1,8 +1,8 @@
+use crate::bedrock::model::BedrockPing;
+use crate::error::PingError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rand::Rng;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::error::PingError;
-use crate::models::bedrock_model::BedrockPing;
 
 const MAGIC: u128 = 0x00ffff00fefefefefdfdfdfd12345678;
 
@@ -14,7 +14,7 @@ fn try_split_to(buffer: &mut Bytes, size: usize) -> Option<Bytes> {
     }
 }
 
-pub fn create_ping() -> Result<Bytes, PingError> {
+pub(crate) fn create_ping() -> Result<Bytes, PingError> {
     let mut data = BytesMut::with_capacity(33);
     data.put_u8(0x1);
     
@@ -34,7 +34,7 @@ pub fn create_ping() -> Result<Bytes, PingError> {
     Ok(data.freeze())
 }
 
-pub fn read_response(buffer: &mut Bytes) -> Result<BedrockPing, PingError> {
+pub(crate) fn read_response(buffer: &mut Bytes) -> Result<BedrockPing, PingError> {
     let _packet_id = buffer.try_get_u8()
         .map_err(|_| PingError::ReadPacket("Packet id not found".to_string()))?;
 
