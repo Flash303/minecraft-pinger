@@ -50,18 +50,18 @@ impl MinecraftPinger {
             ip: &str,
             port: u16,
             config: &PingConfig) -> Result<BedrockPing, PingError> {
-        let rs = timeout(config.timeout(), self.ping_bedrock_server_internal(ip, port)).await??;
+        let rs = timeout(config.timeout(), self.ping_bedrock_server_internal(ip, port, config)).await??;
         Ok(rs)
     }
 
-    async fn ping_bedrock_server_internal(self: &Self, ip: &str, port: u16) -> Result<BedrockPing, PingError> {
+    async fn ping_bedrock_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<BedrockPing, PingError> {
         debug!("Pinging bedrock server {}:{}", ip, port);
 
         let addr = resolve_to_addr(self, ip, port, "udp").await?;
         let start_time = Instant::now();
 
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
-        timeout(Duration::from_secs(1), socket.connect(addr))
+        timeout(config.timeout(), socket.connect(addr))
             .await?
             .map_err(|e| {
                 debug!("Connection error: {}", e);
@@ -71,7 +71,7 @@ impl MinecraftPinger {
         let _ = socket.send(&create_ping()?).await;
 
         let mut buffer = [0u8; 1024];
-        let len = timeout(Duration::from_secs(1), socket.recv(&mut buffer))
+        let len = timeout(config.timeout(), socket.recv(&mut buffer))
             .await?
             .map_err(|_| PingError::ConnectionRefused)?;
 
@@ -90,7 +90,7 @@ impl MinecraftPinger {
         let addr = resolve_to_addr(self, ip, port, "tcp").await?;
 
         let stream_future = TcpStream::connect(addr);
-        let mut stream = timeout(Duration::from_secs(1), stream_future)
+        let mut stream = timeout(config.timeout(), stream_future)
             .await?
             .map_err(|e| {
                 debug!("Connection error: {}", e);
