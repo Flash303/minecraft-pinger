@@ -5,6 +5,7 @@ A high-performance, asynchronous Rust library for pinging Minecraft servers to r
 ## Features
 
 - **Asynchronous I/O**: Built on top of `tokio` for maximum efficiency.
+- **Feature Flags**: Modular design with `java` and `bedrock` features (both enabled by default).
 - **Java & Bedrock Support**: Supports pinging both Java and Bedrock (MCPE) edition servers.
 - **Optimized Performance**: Uses `BufReader`/`BufWriter` and zero-copy string parsing.
 - **Robust DNS Support**: Full support for SRV record resolution (`_minecraft._tcp`).
@@ -21,11 +22,18 @@ minecraft-pinger = { git = "https://github.com/Flash303/minecraft-pinger" }
 tokio = { version = "1.0", features = ["full"] }
 ```
 
+> **Note**: Both `java` and `bedrock` features are enabled by default. If you only need one, you can disable the default features:
+> ```toml
+> [dependencies]
+> minecraft-pinger = { git = "https://github.com/Flash303/minecraft-pinger", default-features = false, features = ["java"] }
+> ```
+
 ## Quick Start
 
 ```rust
 use minecraft_pinger::MinecraftPinger;
-use minecraft_pinger::config::{PingConfig, JavaPingConfig};
+use minecraft_pinger::config::PingConfig;
+use minecraft_pinger::java::config::JavaPingConfig;
 use std::time::Duration;
 
 #[tokio::main]
@@ -36,15 +44,14 @@ async fn main() {
     // 2. Configure your ping settings using the Builder pattern
     let config = PingConfig::builder()
         .set_timeout(Duration::from_secs(3))
-        .set_java_config(
-            JavaPingConfig::builder()
-                .set_protocol_version(763) // 1.20.1
-                .build()
-        )
+        .build();
+
+    let java_config = JavaPingConfig::from(&config.to_builder())
+        .set_protocol_version(763) // 1.20.1
         .build();
 
     // 3. Ping a Java server
-    match pinger.ping_java_server("mc.hypixel.net", 25565, &config).await {
+    match pinger.ping_java_server("mc.hypixel.net", 25565, &java_config).await {
         Ok(response) => {
             println!("Server: {}", response.version.name);
             println!("Players: {}/{}", response.players.online, response.players.max);
@@ -66,14 +73,17 @@ async fn main() {
 
 ## Configuration
 
-Configuration is now done using the Builder pattern (`PingConfig::builder()`).
+Configuration is managed via `PingConfig` for common properties and `JavaPingConfig` for Java-specific options, both utilizing the Builder pattern.
+
+### PingConfig
 
 | Builder Method | Type | Description |
 |----------------|------|-------------|
 | `set_timeout` | `Duration` | Maximum time to wait for a response. |
-| `set_java_config` | `JavaPingConfig` | Specific configuration for Java Edition servers. |
 
 ### JavaPingConfig
+
+Created using `JavaPingConfig::from(&config.to_builder())` or `JavaPingConfig::builder()`.
 
 | Builder Method | Type | Description |
 |----------------|------|-------------|
