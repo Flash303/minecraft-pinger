@@ -29,7 +29,7 @@ pub enum TextComponent {
         text: String,
 
         #[serde(skip_serializing_if = "Option::is_none")]
-        shadow_color: Option<u32>,
+        shadow_color: Option<i32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         atlas: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
