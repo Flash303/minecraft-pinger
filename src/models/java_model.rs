@@ -76,11 +76,11 @@ pub struct PlayerInfo {
     pub id: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ModInfo {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     pub name: String,
-    #[serde(rename = "modList")]
+    #[serde(rename = "modList", default)]
     pub mod_list: Vec<Mod>,
 }
 

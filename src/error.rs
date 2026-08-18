@@ -1,3 +1,4 @@
+use std::string::FromUtf8Error;
 use hickory_resolver::net::NetError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
@@ -20,7 +21,7 @@ pub enum PingError {
     ReadPacket(String),
     
     #[error("Invalid UTF-8: {0}")]
-    Utf8Error(#[from] std::string::FromUtf8Error),
+    Utf8Error(#[from] FromUtf8Error),
     
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

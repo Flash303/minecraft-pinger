@@ -7,7 +7,7 @@ pub mod protocol;
 use std::sync::Arc;
 use error::PingError;
 use protocol::protocol::{read_string};
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use bytes::{Bytes, BytesMut};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::Resolver;
