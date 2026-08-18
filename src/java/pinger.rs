@@ -6,8 +6,8 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use crate::common::dns::resolve_to_addr;
 use crate::common::protocol::read_string;
-use crate::config::PingConfig;
 use crate::error::PingError;
+use crate::java::config::JavaPingConfig;
 use crate::java::model::JavaPing;
 use crate::java::protocol::{read_packet, write_ping_handshake, write_ping_request};
 use crate::MinecraftPinger;
@@ -16,18 +16,18 @@ impl MinecraftPinger {
     pub async fn ping_java_server(self: &Self,
                                   ip: &str,
                                   port: u16,
-                                  config: &PingConfig) -> Result<JavaPing, PingError> {
-        let rs = timeout(config.timeout(), self.ping_java_server_internal(ip, port, &config)).await??;
+                                  config: &JavaPingConfig) -> Result<JavaPing, PingError> {
+        let rs = timeout(config.common().timeout(), self.ping_java_server_internal(ip, port, &config)).await??;
         Ok(rs)
     }
 
-    async fn ping_java_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<JavaPing, PingError> {
+    async fn ping_java_server_internal(self: &Self, ip: &str, port: u16, config: &JavaPingConfig) -> Result<JavaPing, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
         let addr = resolve_to_addr(self, ip, port, "tcp").await?;
 
         let stream_future = TcpStream::connect(addr);
-        let mut stream = timeout(config.timeout(), stream_future)
+        let mut stream = timeout(config.common().timeout(), stream_future)
             .await?
             .map_err(|e| {
                 debug!("Connection error: {}", e);
@@ -42,8 +42,8 @@ impl MinecraftPinger {
 
         let mut buffer = BytesMut::with_capacity(256);
 
-        let handshake_host = config.java_config().hostname().as_deref().unwrap_or(ip);
-        write_ping_handshake(&mut buffer, handshake_host, &port, &config.java_config().protocol_version());
+        let handshake_host = config.hostname().as_deref().unwrap_or(ip);
+        write_ping_handshake(&mut buffer, handshake_host, &port, &config.protocol_version());
         write_ping_request(&mut buffer);
 
         stream.write_all(&buffer.freeze())
