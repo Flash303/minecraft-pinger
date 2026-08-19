@@ -3,24 +3,28 @@ use hickory_resolver::proto::rr::RData;
 use crate::MinecraftPinger;
 use crate::error::PingError;
 
-pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger,
+pub(crate) async fn resolve_to_addrs(pinger: &MinecraftPinger,
                                     host: &str,
                                     default_port: u16,
-                                    protocol: &str) -> Result<SocketAddr, PingError> {
+                                    protocol: &str) -> Result<Vec<SocketAddr>, PingError> {
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return Ok(SocketAddr::new(ip, default_port));
+        return Ok(vec![SocketAddr::new(ip, default_port)]);
     }
 
     let srv_record = format!("_minecraft._{}.{}", protocol, host);
     if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
+        let mut all_addrs = Vec::new();
         for record in lookup.answers() {
             if let RData::SRV(srv) = &record.data {
                 if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(srv.target.clone()).await {
-                    if let Some(ip) = ip_lookup.iter().next() {
-                        return Ok(SocketAddr::new(ip, srv.port));
+                    for ip in ip_lookup.iter() {
+                        all_addrs.push(SocketAddr::new(ip, srv.port));
                     }
                 }
             }
+        }
+        if !all_addrs.is_empty() {
+            return Ok(all_addrs);
         }
     }
 
@@ -28,6 +32,9 @@ pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger,
     let ip_lookup = pinger.dns_resolver.lookup_ip(host).await
         .map_err(|e| PingError::DnsParse(e))?;
     
-    let ip = ip_lookup.iter().next().ok_or(PingError::DnsIpNotFound)?;
-    Ok(SocketAddr::new(ip, default_port))
+    let all_addrs: Vec<SocketAddr> = ip_lookup.iter().map(|ip| SocketAddr::new(ip, default_port)).collect();
+    if all_addrs.is_empty() {
+        return Err(PingError::DnsIpNotFound);
+    }
+    Ok(all_addrs)
 }
