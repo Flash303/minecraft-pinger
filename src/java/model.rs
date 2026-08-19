@@ -29,6 +29,10 @@ pub enum TextComponent {
         text: String,
 
         #[serde(skip_serializing_if = "Option::is_none")]
+        hat: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        player: Option<Player>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         shadow_color: Option<i32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         atlas: Option<String>,
@@ -56,6 +60,20 @@ pub enum TextComponent {
     Array(Vec<TextComponent>),
 }
 // Components end
+
+#[derive(Serialize, Deserialize)]
+pub struct Player {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub properties: Option<Vec<Property>>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Property {
+    pub name: String,
+    pub value: String
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Version {
