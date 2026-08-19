@@ -3,7 +3,10 @@ use hickory_resolver::proto::rr::RData;
 use crate::MinecraftPinger;
 use crate::error::PingError;
 
-pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger, host: &str, default_port: u16, protocol: &str) -> Result<SocketAddr, PingError> {
+pub(crate) async fn resolve_to_addr(pinger: &MinecraftPinger,
+                                    host: &str,
+                                    default_port: u16,
+                                    protocol: &str) -> Result<SocketAddr, PingError> {
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(SocketAddr::new(ip, default_port));
     }
