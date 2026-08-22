@@ -85,7 +85,7 @@ pub struct Property {
 #[derive(Serialize, Deserialize)]
 pub struct Version {
     pub name: String,
-    pub protocol: i32,
+    pub protocol: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize)]
