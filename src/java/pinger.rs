@@ -4,7 +4,7 @@ use log::debug;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use crate::common::dns::resolve_to_addrs;
+use crate::common::dns::resolve_filtered_addrs;
 use crate::common::protocol::read_string;
 use crate::error::PingError;
 use crate::java::config::JavaPingConfig;
@@ -24,7 +24,7 @@ impl MinecraftPinger {
     async fn ping_java_server_internal(self: &Self, ip: &str, port: u16, config: &JavaPingConfig) -> Result<JavaPing, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
-        let addrs = resolve_to_addrs(self, ip, port, "tcp").await?;
+        let addrs = resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()).await?;
 
         let stream_future = TcpStream::connect(&addrs[..]);
         let mut stream = timeout(config.common().timeout(), stream_future)

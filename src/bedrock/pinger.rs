@@ -5,7 +5,7 @@ use tokio::net::UdpSocket;
 use tokio::time::timeout;
 use crate::bedrock::model::BedrockPing;
 use crate::bedrock::protocol::{create_ping, read_response};
-use crate::common::dns::resolve_to_addrs;
+use crate::common::dns::resolve_filtered_addrs;
 use crate::config::PingConfig;
 use crate::error::PingError;
 use crate::MinecraftPinger;
@@ -22,7 +22,7 @@ impl MinecraftPinger {
     async fn ping_bedrock_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<BedrockPing, PingError> {
         debug!("Pinging bedrock server {}:{}", ip, port);
 
-        let addrs = resolve_to_addrs(self, ip, port, "udp").await?;
+        let addrs = resolve_filtered_addrs(self, ip, port, "udp", config.ip_filter()).await?;
         let start_time = Instant::now();
 
         let socket = UdpSocket::bind("0.0.0.0:0").await?;

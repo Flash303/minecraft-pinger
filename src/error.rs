@@ -40,4 +40,7 @@ pub enum PingError {
 
     #[error("Initialization error: {0}")]
     Init(String),
+
+    #[error("Endpoint blocked by IP filter: {0}")]
+    BlockedEndpoint(String),
 }
