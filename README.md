@@ -1,8 +1,12 @@
-# Minecraft Pinger
+<p align="center">
+  <img src=".github/assets/logo.webp" alt="Minecraft Pinger Logo" width="256" />
+</p>
+
+<h1 align="center">Minecraft Pinger</h1>
 
 A high-performance, asynchronous Rust library for pinging Minecraft servers to retrieve status, players, and metadata.
 
-## Features
+## ✨ Features
 
 - **Asynchronous I/O**: Built on top of `tokio` for maximum efficiency.
 - **Feature Flags**: Modular design with `java` and `bedrock` features (both enabled by default).
@@ -11,8 +15,9 @@ A high-performance, asynchronous Rust library for pinging Minecraft servers to r
 - **Robust DNS Support**: Full support for SRV record resolution (`_minecraft._tcp`).
 - **Rich Metadata**: Parses MOTD (plain and JSON components), player samples, versions, and ModInfo (Forge/Fabric).
 - **Resource Efficient**: Shared DNS resolver to minimize overhead during batch pings.
+- **Security**: Built-in IP filtering capability to prevent SSRF (Server-Side Request Forgery) attacks by blocking private or reserved IP addresses.
 
-## Installation
+## ⚙️ Installation
 
 Add this to your `Cargo.toml`:
 
@@ -28,7 +33,7 @@ tokio = { version = "1.0", features = ["full"] }
 > minecraft-pinger = { git = "https://github.com/Flash303/minecraft-pinger", default-features = false, features = ["java"] }
 > ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ```rust
 use minecraft_pinger::MinecraftPinger;
@@ -44,6 +49,7 @@ async fn main() {
     // 2. Configure your ping settings using the Builder pattern
     let config = PingConfig::builder()
         .set_timeout(Duration::from_secs(3))
+        .deny_non_public_ips() // Prevent SSRF by dropping local/private IPs
         .build();
 
     let java_config = JavaPingConfig::from(&config.to_builder())
@@ -71,7 +77,7 @@ async fn main() {
 }
 ```
 
-## Configuration
+## 🛠️ Configuration
 
 Configuration is managed via `PingConfig` for common properties and `JavaPingConfig` for Java-specific options, both utilizing the Builder pattern.
 
@@ -80,6 +86,8 @@ Configuration is managed via `PingConfig` for common properties and `JavaPingCon
 | Builder Method | Type | Description |
 |----------------|------|-------------|
 | `set_timeout` | `Duration` | Maximum time to wait for a response. |
+| `deny_non_public_ips` | `self` | Rejects non-public IPs (e.g. 127.0.0.1, 192.168.0.1), preventing SSRF attacks. |
+| `set_ip_filter` | `Fn(IpAddr) -> bool` | Apply a custom filter to resolved IPs. Returning `false` blocks the connection. |
 
 ### JavaPingConfig
 
@@ -90,14 +98,15 @@ Created using `JavaPingConfig::from(&config.to_builder())` or `JavaPingConfig::b
 | `set_protocol_version` | `i32` | Protocol ID sent in the handshake. |
 | `set_hostname` | `Option<String>` | Override the hostname sent in the handshake (defaults to the IP provided). |
 
-## Error Handling
+## 🚨 Error Handling
 
 The library uses a custom `PingError` enum to categorize failures:
 - `ConnectionRefused`: Network-level connection issues.
 - `TimeoutError`: Request exceeded the configured duration.
 - `SerializationError`: Failed to parse the server's JSON response.
 - `ReadPacketError`: Protocol-level parsing failure.
+- `BlockedEndpoint`: The resolved IP was blocked by the configured IP filter.
 
-## License
+## 📄 License
 
 MIT
