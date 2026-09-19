@@ -30,7 +30,7 @@ tokio = { version = "1.0", features = ["full"] }
 > **Note**: Both `java` and `bedrock` features are enabled by default. If you only need one, you can disable the default features:
 > ```toml
 > [dependencies]
-> minecraft-pinger = { git = "https://github.com/Flash303/minecraft-pinger", default-features = false, features = ["java"] }
+> minecraft-pinger = { version = "0.1.0", default-features = false, features = ["java"] }
 > ```
 
 ## 🚀 Quick Start
