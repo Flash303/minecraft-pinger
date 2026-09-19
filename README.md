@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-minecraft-pinger = { git = "https://github.com/Flash303/minecraft-pinger" }
+minecraft-pinger = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
