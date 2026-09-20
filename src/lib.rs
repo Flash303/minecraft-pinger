@@ -27,8 +27,8 @@ impl MinecraftPinger {
             ResolverConfig::udp_and_tcp(&CLOUDFLARE),
             TokioRuntimeProvider::default(),
         )
-            .build()
-            .map_err(|e| PingError::Init(e.to_string()))?;
+        .build()
+        .map_err(|e| PingError::Init(e.to_string()))?;
 
         Ok(Self {
             dns_resolver: Arc::new(resolver),
