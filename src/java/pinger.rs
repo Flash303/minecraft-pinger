@@ -1,30 +1,42 @@
-use std::time::Instant;
-use bytes::BytesMut;
-use log::debug;
-use tokio::io::{AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
-use tokio::time::timeout;
+use crate::MinecraftPinger;
 use crate::common::dns::resolve_filtered_addrs;
 use crate::common::protocol::read_string;
 use crate::error::PingError;
 use crate::java::config::JavaPingConfig;
 use crate::java::model::JavaPing;
 use crate::java::protocol::{read_packet, write_ping_handshake, write_ping_request};
-use crate::MinecraftPinger;
+use bytes::BytesMut;
+use log::debug;
+use std::time::Instant;
+use tokio::io::{AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
+use tokio::time::timeout;
 
 impl MinecraftPinger {
-    pub async fn ping_java_server(self: &Self,
-                                  ip: &str,
-                                  port: u16,
-                                  config: &JavaPingConfig) -> Result<JavaPing, PingError> {
-        let rs = timeout(config.common().timeout(), self.ping_java_server_internal(ip, port, &config)).await??;
+    pub async fn ping_java_server(
+        &self,
+        ip: &str,
+        port: u16,
+        config: &JavaPingConfig,
+    ) -> Result<JavaPing, PingError> {
+        let rs = timeout(
+            config.common().timeout(),
+            self.ping_java_server_internal(ip, port, config),
+        )
+        .await??;
         Ok(rs)
     }
 
-    async fn ping_java_server_internal(self: &Self, ip: &str, port: u16, config: &JavaPingConfig) -> Result<JavaPing, PingError> {
+    async fn ping_java_server_internal(
+        &self,
+        ip: &str,
+        port: u16,
+        config: &JavaPingConfig,
+    ) -> Result<JavaPing, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
-        let addrs = resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()).await?;
+        let addrs =
+            resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()).await?;
 
         let stream_future = TcpStream::connect(&addrs[..]);
         let mut stream = timeout(config.common().timeout(), stream_future)
@@ -36,17 +48,29 @@ impl MinecraftPinger {
 
         stream.set_nodelay(true).unwrap_or_default();
 
-        debug!("Stream connected to {}", stream.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "unknown".to_string()));
+        debug!(
+            "Stream connected to {}",
+            stream
+                .peer_addr()
+                .map(|a| a.to_string())
+                .unwrap_or_else(|_| "unknown".to_string())
+        );
 
         let start_time = Instant::now();
 
         let mut buffer = BytesMut::with_capacity(256);
 
         let handshake_host = config.hostname().as_deref().unwrap_or(ip);
-        write_ping_handshake(&mut buffer, handshake_host, &port, &config.protocol_version());
+        write_ping_handshake(
+            &mut buffer,
+            handshake_host,
+            &port,
+            &config.protocol_version(),
+        );
         write_ping_request(&mut buffer);
 
-        stream.write_all(&buffer.freeze())
+        stream
+            .write_all(&buffer.freeze())
             .await
             .map_err(|_| PingError::SendPacket)?;
         debug!("Stream all packets !");

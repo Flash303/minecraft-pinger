@@ -1,25 +1,36 @@
-use std::time::Instant;
-use bytes::Bytes;
-use log::debug;
-use tokio::net::UdpSocket;
-use tokio::time::timeout;
+use crate::MinecraftPinger;
 use crate::bedrock::model::BedrockPing;
 use crate::bedrock::protocol::{create_ping, read_response};
 use crate::common::dns::resolve_filtered_addrs;
 use crate::config::PingConfig;
 use crate::error::PingError;
-use crate::MinecraftPinger;
+use bytes::Bytes;
+use log::debug;
+use std::time::Instant;
+use tokio::net::UdpSocket;
+use tokio::time::timeout;
 
 impl MinecraftPinger {
-    pub async fn ping_bedrock_server(self: &Self,
-                                     ip: &str,
-                                     port: u16,
-                                     config: &PingConfig) -> Result<BedrockPing, PingError> {
-        let rs = timeout(config.timeout(), self.ping_bedrock_server_internal(ip, port, config)).await??;
+    pub async fn ping_bedrock_server(
+        &self,
+        ip: &str,
+        port: u16,
+        config: &PingConfig,
+    ) -> Result<BedrockPing, PingError> {
+        let rs = timeout(
+            config.timeout(),
+            self.ping_bedrock_server_internal(ip, port, config),
+        )
+        .await??;
         Ok(rs)
     }
 
-    async fn ping_bedrock_server_internal(self: &Self, ip: &str, port: u16, config: &PingConfig) -> Result<BedrockPing, PingError> {
+    async fn ping_bedrock_server_internal(
+        &self,
+        ip: &str,
+        port: u16,
+        config: &PingConfig,
+    ) -> Result<BedrockPing, PingError> {
         debug!("Pinging bedrock server {}:{}", ip, port);
 
         let addrs = resolve_filtered_addrs(self, ip, port, "udp", config.ip_filter()).await?;
@@ -49,4 +60,3 @@ impl MinecraftPinger {
         Ok(rs)
     }
 }
-

@@ -23,8 +23,9 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = buf.try_get_u8()
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {}", e.to_string())))?;
+        let byte = buf
+            .try_get_u8()
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {e}")))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
@@ -40,12 +41,16 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
 }
 
 // Todo: work on code duplication with read_var_int
-pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mut R) -> Result<i32, PingError> {
+pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(
+    stream: &mut R,
+) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = stream.read_u8().await
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {}", e.to_string())))?;
+        let byte = stream
+            .read_u8()
+            .await
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {e}")))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
@@ -81,5 +86,87 @@ mod tests {
         write_var_int(&mut buf, 255);
         let mut data = buf.freeze();
         assert_eq!(read_var_int(&mut data).unwrap(), 255);
+    }
+
+    #[test]
+    fn test_var_int_zero() {
+        let mut buf = BytesMut::new();
+        write_var_int(&mut buf, 0);
+        let mut data = buf.freeze();
+        assert_eq!(read_var_int(&mut data).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_var_int_large() {
+        let mut buf = BytesMut::new();
+        write_var_int(&mut buf, 2147483647);
+        let mut data = buf.freeze();
+        assert_eq!(read_var_int(&mut data).unwrap(), 2147483647);
+    }
+
+    #[test]
+    fn test_var_int_negative() {
+        let mut buf = BytesMut::new();
+        write_var_int(&mut buf, -1);
+        let mut data = buf.freeze();
+        assert_eq!(read_var_int(&mut data).unwrap(), -1);
+    }
+
+    #[test]
+    fn test_var_int_multiple() {
+        let mut buf = BytesMut::new();
+        write_var_int(&mut buf, 1);
+        write_var_int(&mut buf, 2);
+        write_var_int(&mut buf, 3);
+        let mut data = buf.freeze();
+        assert_eq!(read_var_int(&mut data).unwrap(), 1);
+        assert_eq!(read_var_int(&mut data).unwrap(), 2);
+        assert_eq!(read_var_int(&mut data).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_write_string() {
+        let mut buf = BytesMut::new();
+        write_string(&mut buf, "hello");
+        let mut data = buf.freeze();
+        assert_eq!(read_string(&mut data).unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_write_empty_string() {
+        let mut buf = BytesMut::new();
+        write_string(&mut buf, "");
+        let mut data = buf.freeze();
+        assert_eq!(read_string(&mut data).unwrap(), "");
+    }
+
+    #[test]
+    fn test_write_unicode_string() {
+        let mut buf = BytesMut::new();
+        write_string(&mut buf, "héllo 🌍");
+        let mut data = buf.freeze();
+        assert_eq!(read_string(&mut data).unwrap(), "héllo 🌍");
+    }
+
+    #[test]
+    fn test_read_var_int_shift_security() {
+        let mut buf = BytesMut::new();
+        for _ in 0..6 {
+            buf.put_u8(0xFF);
+        }
+        buf.put_u8(0x01);
+        let mut data = buf.freeze();
+        let result = read_var_int(&mut data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_string_insufficient_data() {
+        let mut buf = BytesMut::new();
+        write_var_int(&mut buf, 10);
+        buf.put_slice(b"hi");
+        let mut data = buf.freeze();
+        let result = read_string(&mut data);
+        assert!(result.is_err());
     }
 }

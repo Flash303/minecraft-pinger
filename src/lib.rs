@@ -1,11 +1,11 @@
-pub mod error;
-pub mod config;
 pub mod common;
+pub mod config;
+pub mod error;
 
-#[cfg(feature = "java")]
-pub mod java;
 #[cfg(feature = "bedrock")]
 pub mod bedrock;
+#[cfg(feature = "java")]
+pub mod java;
 
 use error::PingError;
 use hickory_resolver::Resolver;
@@ -21,13 +21,32 @@ impl MinecraftPinger {
     pub fn new() -> Result<Self, PingError> {
         let resolver = Resolver::builder_with_config(
             ResolverConfig::udp_and_tcp(&CLOUDFLARE),
-            TokioRuntimeProvider::default()
+            TokioRuntimeProvider::default(),
         )
-            .build()
-            .map_err(|e| PingError::Init(e.to_string()))?;
+        .build()
+        .map_err(|e| PingError::Init(e.to_string()))?;
 
         Ok(Self {
-            dns_resolver: Arc::new(resolver)
+            dns_resolver: Arc::new(resolver),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_minecraft_pinger_new() {
+        let pinger = MinecraftPinger::new();
+        assert!(pinger.is_ok());
+    }
+
+    #[test]
+    fn test_minecraft_pinger_new_multiple() {
+        let pinger1 = MinecraftPinger::new();
+        let pinger2 = MinecraftPinger::new();
+        assert!(pinger1.is_ok());
+        assert!(pinger2.is_ok());
     }
 }

@@ -5,7 +5,12 @@ use log::debug;
 use tokio::io::AsyncReadExt;
 
 // Packets
-pub(crate) fn write_ping_handshake(buffer: &mut BytesMut, hostname: &str, port: &u16, protocol_version: &i32) {
+pub(crate) fn write_ping_handshake(
+    buffer: &mut BytesMut,
+    hostname: &str,
+    port: &u16,
+    protocol_version: &i32,
+) {
     let mut handshake = BytesMut::with_capacity(128);
     handshake.put_u8(0x00);
     write_var_int(&mut handshake, *protocol_version); // protocol version
@@ -37,19 +42,81 @@ impl Packet {
     }
 }
 
-pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(stream: &mut R) -> Result<Packet, PingError> {
+pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
+    stream: &mut R,
+) -> Result<Packet, PingError> {
     let length = read_var_int_stream(stream).await?;
 
     // Lire exactement `length` bytes
     let mut buf = vec![0u8; length as usize];
-    stream.read_exact(&mut buf)
-        .await
-        .map_err(|e| {
-            debug!("Read packet error 2 {e}");
-            PingError::ReadPacket(e.to_string())
-        })?;
+    stream.read_exact(&mut buf).await.map_err(|e| {
+        debug!("Read packet error 2 {e}");
+        PingError::ReadPacket(e.to_string())
+    })?;
 
     let mut data = Bytes::from(buf);
 
     Ok(Packet::new(read_var_int(&mut data)? as u8, data))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::BytesMut;
+    use tokio::io::BufReader;
+
+    #[test]
+    fn test_write_ping_handshake() {
+        let mut buffer = BytesMut::new();
+        write_ping_handshake(&mut buffer, "example.com", &25565, &775);
+
+        // Should have length prefix + handshake data
+        assert!(!buffer.is_empty());
+
+        // Verify we can read the length
+        let mut data = buffer.clone().freeze();
+        let length = read_var_int(&mut data).unwrap();
+        assert_eq!(length as usize, data.len());
+    }
+
+    #[test]
+    fn test_write_ping_request() {
+        let mut buffer = BytesMut::new();
+        write_ping_request(&mut buffer);
+
+        let mut data = buffer.freeze();
+        let length = read_var_int(&mut data).unwrap();
+        assert_eq!(length, 1); // packet length
+
+        let packet_id = read_var_int(&mut data).unwrap();
+        assert_eq!(packet_id, 0x00); // status request packet id
+    }
+
+    #[test]
+    fn test_packet_new_and_id() {
+        let packet = Packet::new(0x01, Bytes::from_static(b"test"));
+        assert_eq!(packet.id(), 0x01);
+    }
+
+    #[tokio::test]
+    async fn test_read_packet_valid() {
+        let mut buffer = BytesMut::new();
+        write_ping_request(&mut buffer);
+        let data = buffer.freeze();
+
+        let mut reader = BufReader::new(&data[..]);
+        let packet = read_packet(&mut reader).await.unwrap();
+
+        assert_eq!(packet.id(), 0x00);
+    }
+
+    #[tokio::test]
+    async fn test_read_packet_invalid_length() {
+        let data = Bytes::from_static(&[
+            0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
+        ]);
+        let mut reader = BufReader::new(&data[..]);
+        let result = read_packet(&mut reader).await;
+        assert!(result.is_err());
+    }
 }

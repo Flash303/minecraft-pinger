@@ -1,4 +1,5 @@
-use crate::config::{PingConfig, DEFAULT_PROTOCOL_VERSION, PingConfigBuilder};
+use crate::config::{DEFAULT_PROTOCOL_VERSION, PingConfig, PingConfigBuilder};
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct JavaPingConfig {
@@ -19,7 +20,7 @@ impl JavaPingConfig {
     pub fn protocol_version(&self) -> i32 {
         self.protocol_version
     }
-    
+
     pub fn common(&self) -> &PingConfig {
         &self.common
     }
@@ -41,12 +42,18 @@ pub struct JavaPingConfigBuilder {
     hostname: Option<String>,
 }
 
+impl Default for JavaPingConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaPingConfigBuilder {
     pub fn new() -> Self {
         JavaPingConfigBuilder {
             common: PingConfigBuilder::new(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
-            hostname: None
+            hostname: None,
         }
     }
 
@@ -54,7 +61,7 @@ impl JavaPingConfigBuilder {
         JavaPingConfigBuilder {
             common: config.clone(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
-            hostname: None
+            hostname: None,
         }
     }
 
@@ -68,11 +75,96 @@ impl JavaPingConfigBuilder {
         self
     }
 
+    pub fn set_timeout(mut self, timeout: Duration) -> Self {
+        self.common = self.common.set_timeout(timeout);
+        self
+    }
+
+    pub fn deny_non_public_ips(mut self) -> Self {
+        self.common = self.common.deny_non_public_ips();
+        self
+    }
+
     pub fn build(self) -> JavaPingConfig {
         JavaPingConfig {
             common: self.common.build(),
             hostname: self.hostname,
-            protocol_version: self.protocol_version
+            protocol_version: self.protocol_version,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_java_ping_config_builder_default() {
+        let config = JavaPingConfigBuilder::new().build();
+        assert_eq!(config.protocol_version(), DEFAULT_PROTOCOL_VERSION);
+        assert_eq!(config.common().timeout(), Duration::from_secs(1));
+        assert!(config.hostname().is_none());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_custom_protocol() {
+        let config = JavaPingConfigBuilder::new()
+            .set_protocol_version(765)
+            .build();
+        assert_eq!(config.protocol_version(), 765);
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_custom_hostname() {
+        let config = JavaPingConfigBuilder::new()
+            .set_hostname(Some("custom.example.com".to_string()))
+            .build();
+        assert_eq!(config.hostname(), &Some("custom.example.com".to_string()));
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_custom_timeout() {
+        let config = JavaPingConfigBuilder::new()
+            .set_timeout(Duration::from_secs(5))
+            .build();
+        assert_eq!(config.common().timeout(), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_deny_non_public_ips() {
+        let config = JavaPingConfigBuilder::new().deny_non_public_ips().build();
+        assert!(config.common().ip_filter().is_some());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_from_ping_config_builder() {
+        let base = PingConfigBuilder::new()
+            .set_timeout(Duration::from_secs(10))
+            .deny_non_public_ips();
+        let config = JavaPingConfigBuilder::from(&base).build();
+        assert_eq!(config.common().timeout(), Duration::from_secs(10));
+        assert!(config.common().ip_filter().is_some());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_chaining() {
+        let config = JavaPingConfigBuilder::new()
+            .set_protocol_version(766)
+            .set_hostname(Some("test.com".to_string()))
+            .set_timeout(Duration::from_millis(500))
+            .deny_non_public_ips()
+            .build();
+        assert_eq!(config.protocol_version(), 766);
+        assert_eq!(config.hostname(), &Some("test.com".to_string()));
+        assert_eq!(config.common().timeout(), Duration::from_millis(500));
+        assert!(config.common().ip_filter().is_some());
+    }
+
+    #[test]
+    fn test_java_ping_config_default() {
+        let config = JavaPingConfig::default();
+        assert_eq!(config.protocol_version(), DEFAULT_PROTOCOL_VERSION);
+        assert_eq!(config.common().timeout(), Duration::from_secs(1));
     }
 }
