@@ -80,3 +80,80 @@ impl PingConfigBuilder {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::time::Duration;
+
+    #[test]
+    fn test_ping_config_builder_default() {
+        let config = PingConfigBuilder::new().build();
+        assert_eq!(config.timeout(), DEFAULT_TIMEOUT);
+        assert!(config.ip_filter().is_none());
+    }
+
+    #[test]
+    fn test_ping_config_builder_custom_timeout() {
+        let config = PingConfigBuilder::new()
+            .set_timeout(Duration::from_secs(5))
+            .build();
+        assert_eq!(config.timeout(), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn test_ping_config_builder_deny_non_public_ips() {
+        let config = PingConfigBuilder::new()
+            .deny_non_public_ips()
+            .build();
+        assert!(config.ip_filter().is_some());
+        
+        let filter = config.ip_filter().unwrap();
+        assert!(filter(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+        assert!(!filter(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
+    }
+
+    #[test]
+    fn test_ping_config_builder_custom_ip_filter() {
+        let config = PingConfigBuilder::new()
+            .set_ip_filter(|ip| matches!(ip, IpAddr::V4(_)))
+            .build();
+        assert!(config.ip_filter().is_some());
+        
+        let filter = config.ip_filter().unwrap();
+        assert!(filter(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+        assert!(!filter(IpAddr::V6(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))));
+    }
+
+    #[test]
+    fn test_ping_config_builder_chaining() {
+        let config = PingConfigBuilder::new()
+            .set_timeout(Duration::from_millis(500))
+            .deny_non_public_ips()
+            .build();
+        assert_eq!(config.timeout(), Duration::from_millis(500));
+        assert!(config.ip_filter().is_some());
+    }
+
+    #[test]
+    fn test_ping_config_default() {
+        let config = PingConfig::default();
+        assert_eq!(config.timeout(), DEFAULT_TIMEOUT);
+        assert!(config.ip_filter().is_none());
+    }
+
+    #[test]
+    fn test_ping_config_to_builder() {
+        let original = PingConfigBuilder::new()
+            .set_timeout(Duration::from_secs(10))
+            .deny_non_public_ips()
+            .build();
+        
+        let builder = original.to_builder();
+        let rebuilt = builder.build();
+        
+        assert_eq!(rebuilt.timeout(), Duration::from_secs(10));
+        assert!(rebuilt.ip_filter().is_some());
+    }
+}

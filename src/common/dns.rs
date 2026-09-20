@@ -71,3 +71,59 @@ async fn resolve_all_addrs(pinger: &MinecraftPinger,
     }
     Ok(all_addrs)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::ip_filter::is_public_ip;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_ip_filter_partition() {
+        let addrs = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 25565),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 25565),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 25565),
+        ];
+
+        let filter = Arc::new(is_public_ip);
+        let (allowed, rejected): (Vec<_>, Vec<_>) =
+            addrs.into_iter().partition(|addr| filter(addr.ip()));
+
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0].ip(), IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)));
+        assert_eq!(rejected.len(), 2);
+    }
+
+    #[test]
+    fn test_ip_filter_all_rejected() {
+        let addrs = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 25565),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 25565),
+        ];
+
+        let filter = Arc::new(is_public_ip);
+        let (allowed, rejected): (Vec<_>, Vec<_>) =
+            addrs.into_iter().partition(|addr| filter(addr.ip()));
+
+        assert!(allowed.is_empty());
+        assert_eq!(rejected.len(), 2);
+    }
+
+    #[test]
+    fn test_ip_filter_none_returns_all() {
+        let addrs = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 25565),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 25565),
+        ];
+
+        let filter: Option<&Arc<IpFilter>> = None;
+        // When filter is None, all addresses should be allowed
+        let (allowed, rejected): (Vec<_>, Vec<_>) =
+            addrs.into_iter().partition(|addr| filter.map_or(true, |f| f(addr.ip())));
+
+        assert_eq!(allowed.len(), 2);
+        assert!(rejected.is_empty());
+    }
+}

@@ -133,4 +133,28 @@ mod tests {
         assert!(allowed("2001:4860:4860::8888"));
         assert!(allowed("::ffff:8.8.8.8")); // mapped public: IPv4 rules apply
     }
+
+    #[test]
+    fn test_ipv4_edge_cases() {
+        assert!(!allowed("10.255.255.255"));
+        assert!(allowed("172.15.255.255")); // outside private range (172.16.0.0/12)
+        assert!(!allowed("172.16.0.0")); // inside private range
+        assert!(!allowed("172.31.255.255")); // inside private range
+        assert!(allowed("172.32.0.0")); // outside private range
+        assert!(allowed("192.167.255.255")); // outside private ranges (not 192.168.0.0/16)
+        assert!(allowed("192.169.0.0")); // outside private range
+        assert!(allowed("169.253.255.255")); // outside link-local (169.254.0.0/16)
+        assert!(allowed("169.255.0.0")); // outside link-local
+        assert!(allowed("100.63.255.255")); // outside CGNAT (100.64.0.0/10)
+        assert!(!allowed("100.127.255.255")); // inside CGNAT
+        assert!(allowed("100.128.0.0")); // outside CGNAT
+    }
+
+    #[test]
+    fn test_ipv6_edge_cases() {
+        assert!(!allowed("::ffff:192.168.1.1"));
+        assert!(!allowed("2001:0:0:1::1"));
+        assert!(allowed("2001:200::1"));
+        assert!(!allowed("2001:db8:1::1"));
+    }
 }

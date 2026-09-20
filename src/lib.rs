@@ -31,3 +31,22 @@ impl MinecraftPinger {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_minecraft_pinger_new() {
+        let pinger = MinecraftPinger::new();
+        assert!(pinger.is_ok());
+    }
+
+    #[test]
+    fn test_minecraft_pinger_new_multiple() {
+        let pinger1 = MinecraftPinger::new();
+        let pinger2 = MinecraftPinger::new();
+        assert!(pinger1.is_ok());
+        assert!(pinger2.is_ok());
+    }
+}
