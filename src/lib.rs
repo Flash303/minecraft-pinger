@@ -7,6 +7,10 @@ pub mod bedrock;
 #[cfg(feature = "java")]
 pub mod java;
 
+// Require at least one feature to be enabled
+#[cfg(not(any(feature = "java", feature = "bedrock")))]
+compile_error!("At least one of the 'java' or 'bedrock' features must be enabled");
+
 use error::PingError;
 use hickory_resolver::Resolver;
 use hickory_resolver::config::{CLOUDFLARE, ResolverConfig};
@@ -23,8 +27,8 @@ impl MinecraftPinger {
             ResolverConfig::udp_and_tcp(&CLOUDFLARE),
             TokioRuntimeProvider::default(),
         )
-        .build()
-        .map_err(|e| PingError::Init(e.to_string()))?;
+            .build()
+            .map_err(|e| PingError::Init(e.to_string()))?;
 
         Ok(Self {
             dns_resolver: Arc::new(resolver),
