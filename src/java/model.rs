@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct JavaPing {
@@ -73,13 +73,13 @@ pub struct Player {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<Vec<Property>>
+    pub properties: Option<Vec<Property>>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Property {
     pub name: String,
-    pub value: String
+    pub value: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -136,7 +136,7 @@ mod tests {
         assert_eq!(ping.version.protocol, Some(775));
         assert_eq!(ping.players.online, 5);
         assert_eq!(ping.players.max, 20);
-        
+
         match ping.description {
             Description::Plain(s) => assert_eq!(s, "A Minecraft Server"),
             Description::Component(_) => panic!("Expected plain description"),
@@ -154,7 +154,7 @@ mod tests {
         });
 
         let ping: JavaPing = serde_json::from_value(json).unwrap();
-        
+
         match ping.description {
             Description::Component(TextComponent::Object { text, color, .. }) => {
                 assert_eq!(text, "A Minecraft Server");
@@ -175,7 +175,10 @@ mod tests {
         });
 
         let ping: JavaPing = serde_json::from_value(json).unwrap();
-        assert_eq!(ping.favicon, Some("data:image/png;base64,abc123".to_string()));
+        assert_eq!(
+            ping.favicon,
+            Some("data:image/png;base64,abc123".to_string())
+        );
     }
 
     #[test]
@@ -223,7 +226,7 @@ mod tests {
     fn test_text_component_string_variant() {
         let json = json!("simple string");
         let component: TextComponent = serde_json::from_value(json).unwrap();
-        
+
         match component {
             TextComponent::String(s) => assert_eq!(s, "simple string"),
             _ => panic!("Expected string variant"),
@@ -234,7 +237,7 @@ mod tests {
     fn test_text_component_array_variant() {
         let json = json!([{"text": "part1"}, {"text": "part2"}]);
         let component: TextComponent = serde_json::from_value(json).unwrap();
-        
+
         match component {
             TextComponent::Array(arr) => {
                 assert_eq!(arr.len(), 2);

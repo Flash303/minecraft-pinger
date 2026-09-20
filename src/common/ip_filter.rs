@@ -52,8 +52,7 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
     }
 
     let s = ip.segments();
-    !(
-        ip.is_loopback()
+    !(ip.is_loopback()
         || ip.is_unspecified()
         // ::/8 - reserved (incl. :: and deprecated IPv4-compatible addresses)
         || s[0] == 0
@@ -69,8 +68,7 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
         // ORCHID...); global allocations start at 2001:0200::
         || (s[0] == 0x2001 && (s[1] & 0xff00) == 0x0000)
         // 2001:db8::/32 - documentation
-        || (s[0] == 0x2001 && s[1] == 0x0db8)
-    )
+        || (s[0] == 0x2001 && s[1] == 0x0db8))
 }
 
 #[cfg(test)]

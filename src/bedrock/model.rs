@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::PingError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(default)]
@@ -55,7 +55,7 @@ mod tests {
     fn test_bedrock_ping_try_from_full() {
         let data = "MCPE;Test Server;589;1.20.0;10;20;1234567890;world;Survival;1;19132;123";
         let ping = BedrockPing::try_from(data.to_string()).unwrap();
-        
+
         assert_eq!(ping.edition, "MCPE");
         assert_eq!(ping.motd, "Test Server");
         assert_eq!(ping.protocol_version, 589);
@@ -75,7 +75,7 @@ mod tests {
     fn test_bedrock_ping_try_from_minimal() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890;world;Creative";
         let ping = BedrockPing::try_from(data.to_string()).unwrap();
-        
+
         assert_eq!(ping.edition, "MCPE");
         assert_eq!(ping.motd, "Test");
         assert_eq!(ping.protocol_version, 589);
@@ -92,7 +92,7 @@ mod tests {
     fn test_bedrock_ping_try_from_empty_game_mode() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890;world";
         let ping = BedrockPing::try_from(data.to_string()).unwrap();
-        
+
         assert_eq!(ping.game_mode, "");
     }
 
@@ -100,7 +100,7 @@ mod tests {
     fn test_bedrock_ping_try_from_invalid_protocol_version() {
         let data = "MCPE;Test;invalid;1.20.0;0;20;1234567890;world";
         let ping = BedrockPing::try_from(data.to_string()).unwrap();
-        
+
         assert_eq!(ping.protocol_version, 0);
     }
 
@@ -108,7 +108,7 @@ mod tests {
     fn test_bedrock_ping_try_from_invalid_players() {
         let data = "MCPE;Test;589;1.20.0;invalid;invalid;1234567890;world";
         let ping = BedrockPing::try_from(data.to_string()).unwrap();
-        
+
         assert_eq!(ping.current_players, 0);
         assert_eq!(ping.max_players, 0);
     }
@@ -117,7 +117,7 @@ mod tests {
     fn test_bedrock_ping_try_from_too_few_parts() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890";
         let result = BedrockPing::try_from(data.to_string());
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             PingError::ParseResponse => {}
@@ -142,10 +142,10 @@ mod tests {
             unknown_val: Some(123),
             latency: 50,
         };
-        
+
         let json = serde_json::to_string(&ping).unwrap();
         let deserialized: BedrockPing = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.edition, ping.edition);
         assert_eq!(deserialized.motd, ping.motd);
         assert_eq!(deserialized.protocol_version, ping.protocol_version);

@@ -29,7 +29,7 @@ impl PingConfig {
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
-    
+
     pub fn ip_filter(&self) -> Option<&Arc<IpFilter>> {
         self.ip_filter.as_ref()
     }
@@ -47,6 +47,12 @@ pub struct PingConfigBuilder {
     ip_filter: Option<Arc<IpFilter>>,
 }
 
+impl Default for PingConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PingConfigBuilder {
     pub fn new() -> PingConfigBuilder {
         PingConfigBuilder {
@@ -59,12 +65,12 @@ impl PingConfigBuilder {
         self.timeout = timeout;
         self
     }
-    
+
     pub fn deny_non_public_ips(mut self) -> PingConfigBuilder {
         self.ip_filter = Some(Arc::new(is_public_ip));
         self
     }
-    
+
     pub fn set_ip_filter<F>(mut self, filter: F) -> PingConfigBuilder
     where
         F: Fn(IpAddr) -> bool + Send + Sync + 'static,
@@ -104,11 +110,9 @@ mod tests {
 
     #[test]
     fn test_ping_config_builder_deny_non_public_ips() {
-        let config = PingConfigBuilder::new()
-            .deny_non_public_ips()
-            .build();
+        let config = PingConfigBuilder::new().deny_non_public_ips().build();
         assert!(config.ip_filter().is_some());
-        
+
         let filter = config.ip_filter().unwrap();
         assert!(filter(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!filter(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
@@ -120,10 +124,12 @@ mod tests {
             .set_ip_filter(|ip| matches!(ip, IpAddr::V4(_)))
             .build();
         assert!(config.ip_filter().is_some());
-        
+
         let filter = config.ip_filter().unwrap();
         assert!(filter(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
-        assert!(!filter(IpAddr::V6(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!filter(IpAddr::V6(std::net::Ipv6Addr::new(
+            0, 0, 0, 0, 0, 0, 0, 1
+        ))));
     }
 
     #[test]
@@ -149,10 +155,10 @@ mod tests {
             .set_timeout(Duration::from_secs(10))
             .deny_non_public_ips()
             .build();
-        
+
         let builder = original.to_builder();
         let rebuilt = builder.build();
-        
+
         assert_eq!(rebuilt.timeout(), Duration::from_secs(10));
         assert!(rebuilt.ip_filter().is_some());
     }

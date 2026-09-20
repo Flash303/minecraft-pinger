@@ -1,5 +1,5 @@
-use std::string::FromUtf8Error;
 use hickory_resolver::net::NetError;
+use std::string::FromUtf8Error;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
@@ -13,28 +13,28 @@ pub enum PingError {
 
     #[error("Connection refused")]
     ConnectionRefused,
-    
+
     #[error("Failed to send packet")]
     SendPacket,
-    
+
     #[error("Failed to read packet: {0}")]
     ReadPacket(String),
-    
+
     #[error("Invalid UTF-8: {0}")]
     Utf8Error(#[from] FromUtf8Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("DNS parse error: {0}")]
     DnsParse(#[source] NetError),
-    
+
     #[error("DNS IP not found")]
     DnsIpNotFound,
-    
+
     #[error("Address parse error: {0}")]
     AddressParse(#[source] NetError),
-    
+
     #[error("Failed to parse response")]
     ParseResponse,
 
@@ -48,14 +48,14 @@ pub enum PingError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io;
     use std::error::Error;
+    use std::io;
 
     #[test]
     fn test_ping_error_io() {
         let io_error = io::Error::new(io::ErrorKind::ConnectionRefused, "connection refused");
         let ping_error: PingError = io_error.into();
-        
+
         match ping_error {
             PingError::Io(_) => {}
             _ => panic!("Expected Io error"),
@@ -94,7 +94,7 @@ mod tests {
     fn test_ping_error_utf8_error() {
         let utf8_error = String::from_utf8(vec![0xFF, 0xFE]).unwrap_err();
         let ping_error: PingError = utf8_error.into();
-        
+
         match ping_error {
             PingError::Utf8Error(_) => {}
             _ => panic!("Expected Utf8Error"),
@@ -106,7 +106,7 @@ mod tests {
     fn test_ping_error_serialization() {
         let json_error = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
         let ping_error: PingError = json_error.into();
-        
+
         match ping_error {
             PingError::Serialization(_) => {}
             _ => panic!("Expected Serialization error"),
@@ -141,13 +141,19 @@ mod tests {
     #[test]
     fn test_ping_error_init() {
         let ping_error = PingError::Init("test init error".to_string());
-        assert_eq!(ping_error.to_string(), "Initialization error: test init error");
+        assert_eq!(
+            ping_error.to_string(),
+            "Initialization error: test init error"
+        );
     }
 
     #[test]
     fn test_ping_error_blocked_endpoint() {
         let ping_error = PingError::BlockedEndpoint("10.0.0.1".to_string());
-        assert_eq!(ping_error.to_string(), "Endpoint blocked by IP filter: 10.0.0.1");
+        assert_eq!(
+            ping_error.to_string(),
+            "Endpoint blocked by IP filter: 10.0.0.1"
+        );
     }
 
     #[test]

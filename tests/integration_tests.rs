@@ -1,4 +1,7 @@
-use minecraft_pinger::{MinecraftPinger, config::PingConfigBuilder, java::config::JavaPingConfigBuilder, bedrock::model::BedrockPing, common::ip_filter::is_public_ip};
+use minecraft_pinger::{
+    MinecraftPinger, bedrock::model::BedrockPing, common::ip_filter::is_public_ip,
+    config::PingConfigBuilder, java::config::JavaPingConfigBuilder,
+};
 use std::time::Duration;
 
 #[test]
@@ -9,7 +12,7 @@ fn test_full_java_config_builder() {
         .set_timeout(Duration::from_secs(5))
         .deny_non_public_ips()
         .build();
-    
+
     assert_eq!(config.protocol_version(), 765);
     assert_eq!(config.hostname(), &Some("custom.example.com".to_string()));
     assert_eq!(config.common().timeout(), Duration::from_secs(5));
@@ -22,7 +25,7 @@ fn test_full_ping_config_builder() {
         .set_timeout(Duration::from_millis(500))
         .deny_non_public_ips()
         .build();
-    
+
     assert_eq!(config.timeout(), Duration::from_millis(500));
     assert!(config.ip_filter().is_some());
 }
@@ -40,7 +43,7 @@ fn test_ip_filter_public_ips() {
         "2001:4860:4860::8888",
         "::ffff:8.8.8.8",
     ];
-    
+
     for ip_str in public_ips {
         let ip = ip_str.parse().unwrap();
         assert!(is_public_ip(ip), "Expected {} to be public", ip_str);
@@ -78,7 +81,7 @@ fn test_ip_filter_private_ips() {
         "::ffff:10.0.0.1",
         "::ffff:169.254.169.254",
     ];
-    
+
     for ip_str in private_ips {
         let ip = ip_str.parse().unwrap();
         assert!(!is_public_ip(ip), "Expected {} to be private", ip_str);
@@ -89,7 +92,7 @@ fn test_ip_filter_private_ips() {
 fn test_bedrock_ping_parsing() {
     let response_str = "MCPE;Test Server;589;1.20.0;10;20;1234567890;world;Survival;1;19132;123";
     let result = BedrockPing::try_from(response_str.to_string()).unwrap();
-    
+
     assert_eq!(result.edition, "MCPE");
     assert_eq!(result.motd, "Test Server");
     assert_eq!(result.protocol_version, 589);
@@ -116,7 +119,7 @@ fn test_config_builder_chaining() {
         .set_timeout(Duration::from_secs(1))
         .set_ip_filter(|_| true)
         .build();
-    
+
     assert_eq!(config.timeout(), Duration::from_secs(1));
     assert!(config.ip_filter().is_some());
 }
@@ -126,9 +129,9 @@ fn test_java_ping_config_from_ping_config() {
     let base = PingConfigBuilder::new()
         .set_timeout(Duration::from_secs(10))
         .deny_non_public_ips();
-    
+
     let config = JavaPingConfigBuilder::from(&base).build();
-    
+
     assert_eq!(config.common().timeout(), Duration::from_secs(10));
     assert!(config.common().ip_filter().is_some());
 }

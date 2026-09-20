@@ -1,4 +1,4 @@
-use crate::config::{PingConfig, DEFAULT_PROTOCOL_VERSION, PingConfigBuilder};
+use crate::config::{DEFAULT_PROTOCOL_VERSION, PingConfig, PingConfigBuilder};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -20,7 +20,7 @@ impl JavaPingConfig {
     pub fn protocol_version(&self) -> i32 {
         self.protocol_version
     }
-    
+
     pub fn common(&self) -> &PingConfig {
         &self.common
     }
@@ -42,12 +42,18 @@ pub struct JavaPingConfigBuilder {
     hostname: Option<String>,
 }
 
+impl Default for JavaPingConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaPingConfigBuilder {
     pub fn new() -> Self {
         JavaPingConfigBuilder {
             common: PingConfigBuilder::new(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
-            hostname: None
+            hostname: None,
         }
     }
 
@@ -55,7 +61,7 @@ impl JavaPingConfigBuilder {
         JavaPingConfigBuilder {
             common: config.clone(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
-            hostname: None
+            hostname: None,
         }
     }
 
@@ -83,7 +89,7 @@ impl JavaPingConfigBuilder {
         JavaPingConfig {
             common: self.common.build(),
             hostname: self.hostname,
-            protocol_version: self.protocol_version
+            protocol_version: self.protocol_version,
         }
     }
 }
@@ -127,9 +133,7 @@ mod tests {
 
     #[test]
     fn test_java_ping_config_builder_deny_non_public_ips() {
-        let config = JavaPingConfigBuilder::new()
-            .deny_non_public_ips()
-            .build();
+        let config = JavaPingConfigBuilder::new().deny_non_public_ips().build();
         assert!(config.common().ip_filter().is_some());
     }
 

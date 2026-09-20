@@ -23,8 +23,9 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = buf.try_get_u8()
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {}", e.to_string())))?;
+        let byte = buf
+            .try_get_u8()
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {e}")))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
@@ -40,12 +41,16 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
 }
 
 // Todo: work on code duplication with read_var_int
-pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(stream: &mut R) -> Result<i32, PingError> {
+pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(
+    stream: &mut R,
+) -> Result<i32, PingError> {
     let mut result = 0i32;
     let mut shift = 0;
     loop {
-        let byte = stream.read_u8().await
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {}", e.to_string())))?;
+        let byte = stream
+            .read_u8()
+            .await
+            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {e}")))?;
         result |= ((byte & DATA_MASK) as i32) << shift;
         if byte & CONTINUATION_BIT == 0 {
             break;
