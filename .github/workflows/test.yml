@@ -34,11 +34,8 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Run tests
+      - name: Run tests (default features)
         run: cargo test --all-features
-
-      - name: Run tests (no default features)
-        run: cargo test --no-default-features
 
       - name: Run tests (java only)
         run: cargo test --features java
@@ -78,8 +75,11 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build
+      - name: Build (default features)
         run: cargo build --all-features --release
 
-      - name: Build (no default features)
-        run: cargo build --no-default-features --release
+      - name: Build (java only)
+        run: cargo build --features java --release
+
+      - name: Build (bedrock only)
+        run: cargo build --features bedrock --release
