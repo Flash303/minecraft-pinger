@@ -15,15 +15,14 @@ bedrock = []
 java = []
 
 [dependencies]
-tokio = { version = "1.*", features = ["full"] }
+tokio = { version = "1.*", features = ["net", "time", "io-util", "rt"] }
 serde = { version = "1.0.*", features = ["derive"] }
-hickory-resolver = { version = "0.26.*", features = ["tokio"] }
+hickory-resolver = { version = "0.26.*", default-features = false, features = ["tokio"] }
 
 serde_json = "1.*"
 thiserror = "2.*"
 
 bytes = "1.*"
 
-csv = "1.4.*"
 log = "0.4.*"
 rand = "0.10.*"
