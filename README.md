@@ -23,14 +23,14 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-minecraft-pinger = "0.1.0"
+minecraft-pinger = "0.1.*"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
 > **Note**: Both `java` and `bedrock` features are enabled by default. If you only need one, you can disable the default features:
 > ```toml
 > [dependencies]
-> minecraft-pinger = { version = "0.1.0", default-features = false, features = ["java"] }
+> minecraft-pinger = { version = "0.1.*", default-features = false, features = ["java"] }
 > ```
 
 ## 🚀 Quick Start
