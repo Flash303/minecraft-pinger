@@ -75,6 +75,8 @@ impl MinecraftPinger {
             .map_err(|_| PingError::SendPacket)?;
         debug!("Stream all packets !");
 
+        let connected_addr = stream.peer_addr().ok();
+
         let mut buffered_reader = BufReader::new(&mut stream);
         let mut packet = read_packet(&mut buffered_reader).await?;
         debug!("Received Packet ID: {}", packet.id());
@@ -85,6 +87,7 @@ impl MinecraftPinger {
         let mut as_res = serde_json::from_str::<JavaPing>(&json)?;
 
         as_res.latency = latency;
+        as_res.connected_addr = connected_addr;
         Ok(as_res)
     }
 }

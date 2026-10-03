@@ -51,11 +51,14 @@ impl MinecraftPinger {
             .await?
             .map_err(|_| PingError::ConnectionRefused)?;
 
+        let connected_addr = socket.peer_addr().ok();
+
         let mut response_bytes = Bytes::copy_from_slice(&buffer[..len]);
         let latency = start_time.elapsed().as_millis() as u32;
 
         let mut rs = read_response(&mut response_bytes)?;
         rs.latency = latency;
+        rs.connected_addr = connected_addr;
 
         Ok(rs)
     }

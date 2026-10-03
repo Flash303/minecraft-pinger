@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use crate::error::PingError;
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +20,9 @@ pub struct BedrockPing {
 
     #[serde(skip_deserializing)]
     pub latency: u32,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub connected_addr: Option<SocketAddr>,
 }
 
 impl TryFrom<String> for BedrockPing {
@@ -43,6 +47,7 @@ impl TryFrom<String> for BedrockPing {
             port: parts.get(10).and_then(|s| s.parse().ok()),
             unknown_val: parts.get(11).and_then(|s| s.parse().ok()),
             latency: 0,
+            connected_addr: None,
         })
     }
 }
@@ -141,6 +146,7 @@ mod tests {
             port: Some(19132),
             unknown_val: Some(123),
             latency: 50,
+            connected_addr: None,
         };
 
         let json = serde_json::to_string(&ping).unwrap();

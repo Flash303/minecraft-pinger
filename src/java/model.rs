@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -11,6 +12,9 @@ pub struct JavaPing {
 
     #[serde(default)]
     pub latency: u32,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub connected_addr: Option<SocketAddr>,
 }
 
 // Components
