@@ -1,6 +1,6 @@
-use std::net::SocketAddr;
 use crate::error::PingError;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(default)]
