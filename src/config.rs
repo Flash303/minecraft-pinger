@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::common::ip_filter::{IpFilter, is_public_ip};
 
-pub const DEFAULT_PROTOCOL_VERSION: i32 = 775;
+pub const DEFAULT_PROTOCOL_VERSION: i32 = 777;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
