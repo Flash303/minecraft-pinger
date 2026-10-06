@@ -14,11 +14,11 @@ pub(crate) async fn resolve_filtered_addrs(
     default_port: u16,
     protocol: &str,
     ip_filter: Option<&Arc<IpFilter>>,
-) -> Result<Vec<SocketAddr>, PingError> {
-    let addrs = resolve_all_addrs(pinger, host, default_port, protocol).await?;
+) -> Result<(Option<String>, Vec<SocketAddr>), PingError> {
+    let (override_hostname, addrs) = resolve_all_addrs(pinger, host, default_port, protocol).await?;
 
     let Some(filter) = ip_filter.map(Arc::as_ref) else {
-        return Ok(addrs);
+        return Ok((override_hostname, addrs));
     };
 
     let (allowed, rejected): (Vec<SocketAddr>, Vec<SocketAddr>) =
@@ -35,7 +35,7 @@ pub(crate) async fn resolve_filtered_addrs(
         )));
     }
 
-    Ok(allowed)
+    Ok((override_hostname, allowed))
 }
 
 async fn resolve_all_addrs(
@@ -43,29 +43,41 @@ async fn resolve_all_addrs(
     host: &str,
     default_port: u16,
     protocol: &str,
-) -> Result<Vec<SocketAddr>, PingError> {
+) -> Result<(Option<String>, Vec<SocketAddr>), PingError> {
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return Ok(vec![SocketAddr::new(ip, default_port)]);
+        return Ok((None, vec![SocketAddr::new(ip, default_port)]));
     }
 
+    // SRV resolve
     let srv_record = format!("_minecraft._{}.{}", protocol, host);
     if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
+
+        let mut override_hostname: Option<String> = None;
+
         let mut all_addrs = Vec::new();
         for record in lookup.answers() {
-            if let RData::SRV(srv) = &record.data
-                && let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(srv.target.clone()).await
-            {
-                for ip in ip_lookup.iter() {
-                    all_addrs.push(SocketAddr::new(ip, srv.port));
+            if let RData::SRV(srv) = &record.data {
+                let srv_target = srv.target.to_string().trim_end_matches('.').to_string();
+                if !srv_target.parse::<IpAddr>().is_ok() { // if the srv target is not an ip, we use the subdomain as hostname
+                    override_hostname = Some(srv_target.clone());
+                }
+
+                if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(srv.target.clone()).await {
+                    let ips: Vec<SocketAddr> = ip_lookup
+                        .iter()
+                        .map(|ip| SocketAddr::new(ip, srv.port))
+                        .collect();
+
+                    all_addrs.extend(ips);
                 }
             }
         }
         if !all_addrs.is_empty() {
-            return Ok(all_addrs);
+            return Ok((override_hostname, all_addrs));
         }
     }
 
-    // Fallback
+    // Fallback - Resolve from A or AAAA ... Not SRV
     let ip_lookup = pinger
         .dns_resolver
         .lookup_ip(host)
@@ -79,7 +91,7 @@ async fn resolve_all_addrs(
     if all_addrs.is_empty() {
         return Err(PingError::DnsIpNotFound);
     }
-    Ok(all_addrs)
+    Ok((None, all_addrs))
 }
 
 #[cfg(test)]

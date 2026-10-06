@@ -35,7 +35,7 @@ impl MinecraftPinger {
     ) -> Result<JavaPing, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
-        let addrs =
+        let (hostname, addrs) =
             resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()).await?;
 
         let stream_future = TcpStream::connect(&addrs[..]);
@@ -60,7 +60,9 @@ impl MinecraftPinger {
 
         let mut buffer = BytesMut::with_capacity(256);
 
-        let handshake_host = config.hostname().as_deref().unwrap_or(ip);
+        let classic_hostname = hostname.as_deref().unwrap_or(ip);
+
+        let handshake_host = config.hostname().as_deref().unwrap_or(classic_hostname);
         write_ping_handshake(
             &mut buffer,
             handshake_host,
