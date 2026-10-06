@@ -25,6 +25,15 @@ pub enum Description {
     Component(TextComponent),
 }
 
+impl Description {
+    pub fn to_plain_text(&self) -> String {
+        match self {
+            Description::Plain(s) => s.clone(),
+            Description::Component(c) => c.to_plain_text(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TextComponent {
@@ -62,6 +71,33 @@ pub enum TextComponent {
     },
     String(String),
     Array(Vec<TextComponent>),
+}
+
+impl TextComponent {
+    pub fn to_plain_text(&self) -> String {
+        let mut out = String::new();
+        self.write_plain_text(&mut out);
+        out
+    }
+
+    fn write_plain_text(&self, out: &mut String) {
+        match self {
+            TextComponent::String(s) => out.push_str(s),
+            TextComponent::Array(items) => {
+                for item in items {
+                    item.write_plain_text(out);
+                }
+            }
+            TextComponent::Object { text, extra, .. } => {
+                out.push_str(text);
+                if let Some(extra) = extra {
+                    for item in extra {
+                        item.write_plain_text(out);
+                    }
+                }
+            }
+        }
+    }
 }
 // Components end
 
@@ -277,5 +313,29 @@ mod tests {
         assert_eq!(players.online, 10);
         assert_eq!(players.max, 20);
         assert!(players.sample.is_some());
+    }
+
+    #[test]
+    fn test_description_to_plain_text_plain() {
+        let description = Description::Plain("A Minecraft Server".to_string());
+        assert_eq!(description.to_plain_text(), "A Minecraft Server");
+    }
+
+    #[test]
+    fn test_description_to_plain_text_component_with_extra() {
+        let json = json!({
+            "text": "Hello ",
+            "color": "green",
+            "extra": [{"text": "World"}, ["!", {"text": "!"}]]
+        });
+        let component: TextComponent = serde_json::from_value(json).unwrap();
+        let description = Description::Component(component);
+        assert_eq!(description.to_plain_text(), "Hello World!!");
+    }
+
+    #[test]
+    fn test_text_component_to_plain_text_string_variant() {
+        let component = TextComponent::String("simple".to_string());
+        assert_eq!(component.to_plain_text(), "simple");
     }
 }
