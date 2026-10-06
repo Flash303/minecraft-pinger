@@ -17,6 +17,7 @@ use hickory_resolver::config::{CLOUDFLARE, ResolverConfig};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 pub struct MinecraftPinger {
     dns_resolver: Arc<Resolver<TokioRuntimeProvider>>,
 }
