@@ -19,50 +19,36 @@ pub(crate) fn write_string(buffer: &mut BytesMut, string: &str) {
     buffer.put_slice(string.as_bytes());
 }
 
-pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
-    let mut result = 0i32;
-    let mut shift = 0;
-    loop {
-        let byte = buf
-            .try_get_u8()
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v1) {e}")))?;
-        result |= ((byte & DATA_MASK) as i32) << shift;
-        if byte & CONTINUATION_BIT == 0 {
-            break;
-        }
-        shift += 7;
+macro_rules! decode_var_int {
+    ($read_byte:expr, $err_msg:literal) => {{
+        let mut result = 0i32;
+        let mut shift = 0;
+        loop {
+            let byte =
+                $read_byte.map_err(|e| PingError::ReadPacket(format!("{} {e}", $err_msg)))?;
 
-        // Security
-        if shift >= 35 {
-            return Err(PingError::ReadPacket("Shift security".to_string()));
+            result |= ((byte & DATA_MASK) as i32) << shift;
+            if byte & CONTINUATION_BIT == 0 {
+                break Ok(result);
+            }
+            shift += 7;
+
+            // Security
+            if shift >= 35 {
+                break Err(PingError::ReadPacket("Shift security".to_string()));
+            }
         }
-    }
-    Ok(result)
+    }};
 }
 
-// Todo: work on code duplication with read_var_int
+pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
+    decode_var_int!(buf.try_get_u8(), "Read varint length (v1)")
+}
+
 pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(
     stream: &mut R,
 ) -> Result<i32, PingError> {
-    let mut result = 0i32;
-    let mut shift = 0;
-    loop {
-        let byte = stream
-            .read_u8()
-            .await
-            .map_err(|e| PingError::ReadPacket(format!("Read varint length (v2) {e}")))?;
-        result |= ((byte & DATA_MASK) as i32) << shift;
-        if byte & CONTINUATION_BIT == 0 {
-            break;
-        }
-        shift += 7;
-
-        // Security
-        if shift >= 35 {
-            return Err(PingError::ReadPacket("Shift security".to_string()));
-        }
-    }
-    Ok(result)
+    decode_var_int!(stream.read_u8().await, "Read varint length (v2)")
 }
 
 pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
