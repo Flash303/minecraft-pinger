@@ -1,12 +1,32 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use hickory_resolver::proto::rr::RData;
+use hickory_resolver::net::NetError;
+use hickory_resolver::proto::ProtoError;
+use hickory_resolver::proto::rr::{Name, RData};
 use log::debug;
 
 use crate::MinecraftPinger;
 use crate::common::ip_filter::IpFilter;
 use crate::error::PingError;
+
+fn is_ldh(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.'
+}
+
+fn parse_host(host: &str) -> Result<Name, PingError> {
+    if host.contains(['\\', '*']) {
+        return Err(PingError::DnsParse(NetError::Proto(ProtoError::from(
+            format!("hostname contains an illegal character: {host}"),
+        ))));
+    }
+
+    if host.is_ascii() && host.bytes().all(is_ldh) {
+        return Name::from_ascii(host).map_err(|e| PingError::DnsParse(e.into()));
+    }
+
+    Name::from_utf8(host).map_err(|e| PingError::DnsParse(e.into()))
+}
 
 pub(crate) async fn resolve_filtered_addrs(
     pinger: &MinecraftPinger,
@@ -51,7 +71,9 @@ async fn resolve_all_addrs(
 
     // SRV resolve
     let srv_record = format!("_minecraft._{}.{}", protocol, host);
-    if let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_record.as_str()).await {
+    if let Ok(srv_name) = parse_host(&srv_record)
+        && let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_name).await
+    {
         let mut override_hostname: Option<String> = None;
 
         let mut all_addrs = Vec::new();
@@ -79,9 +101,10 @@ async fn resolve_all_addrs(
     }
 
     // Fallback - Resolve from A or AAAA ... Not SRV
+    let host_name = parse_host(host)?;
     let ip_lookup = pinger
         .dns_resolver
-        .lookup_ip(host)
+        .lookup_ip(host_name)
         .await
         .map_err(PingError::DnsParse)?;
 
@@ -101,6 +124,70 @@ mod tests {
     use crate::common::ip_filter::is_public_ip;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::Arc;
+
+    #[test]
+    fn test_parse_host_accepts_underscore_in_label() {
+        let name = parse_host("my_server.example.lan").unwrap();
+        assert_eq!(name.to_string(), "my_server.example.lan");
+    }
+
+    #[test]
+    fn test_parse_host_accepts_srv_prefix() {
+        let name = parse_host("_minecraft._tcp.example.com").unwrap();
+        assert_eq!(name.to_string(), "_minecraft._tcp.example.com");
+    }
+
+    #[test]
+    fn test_parse_host_accepts_idn() {
+        let name = parse_host("münchen.example.com").unwrap();
+        assert_eq!(name.to_ascii(), "xn--mnchen-3ya.example.com");
+    }
+
+    #[test]
+    fn test_parse_host_accepts_trailing_dot() {
+        let name = parse_host("example.com.").unwrap();
+        assert!(name.is_fqdn());
+    }
+
+    #[test]
+    fn test_parse_host_rejects_backslash_escape() {
+        assert!(parse_host("attacker.com\\.trusted.com").is_err());
+        assert!(parse_host("a\\_b.com").is_err());
+    }
+
+    #[test]
+    fn test_parse_host_rejects_wildcard() {
+        assert!(parse_host("*.example.com").is_err());
+        assert!(parse_host("*ac.example.com").is_err());
+    }
+
+    #[test]
+    fn test_parse_host_rejects_control_and_separators() {
+        assert!(parse_host("a b.com").is_err());
+        assert!(parse_host("a;b.com").is_err());
+        assert!(parse_host("a\nb.com").is_err());
+        assert!(parse_host("a\tb.com").is_err());
+        assert!(parse_host("a\0b.com").is_err());
+        assert!(parse_host("user@host.com").is_err());
+        assert!(parse_host("a\\/b.com").is_err());
+    }
+
+    #[test]
+    fn test_parse_host_rejects_oversized_label() {
+        let long = format!("{}.com", "a".repeat(64));
+        assert!(parse_host(&long).is_err());
+    }
+
+    #[test]
+    fn test_parse_host_rejects_empty_label() {
+        assert!(parse_host(".example.com").is_err());
+        assert!(parse_host("a..b.com").is_err());
+    }
+
+    #[test]
+    fn test_parse_host_error_is_dns_parse() {
+        assert!(matches!(parse_host("a b.com"), Err(PingError::DnsParse(_))));
+    }
 
     #[test]
     fn test_ip_filter_partition() {
