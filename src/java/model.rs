@@ -130,7 +130,7 @@ pub struct Version {
 
 #[derive(Serialize, Deserialize)]
 pub struct Players {
-    pub online: u32,
+    pub online: i32,
     pub max: i32,
     pub sample: Option<Vec<PlayerInfo>>,
 }
