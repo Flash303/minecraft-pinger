@@ -9,7 +9,7 @@ pub struct BedrockPing {
     pub motd: String,
     pub protocol_version: u32,
     pub version: String,
-    pub current_players: u32,
+    pub current_players: i32,
     pub max_players: u32,
     pub server_id: String,
     pub map_name: String,
