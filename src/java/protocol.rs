@@ -168,4 +168,28 @@ mod tests {
         let result = read_packet(&mut reader).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_read_packet_too_big() {
+        // VarInt(MAX_PACKET_SIZE + 1): rejected before any payload read.
+        let data = Bytes::from_static(&[0x81, 0x80, 0x40, 0x00]);
+        let mut reader = &data[..];
+        let result = read_packet(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(PingError::ReadPacket("packet too big"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_read_packet_negative_length() {
+        // VarInt(-1): rejected by the same guard.
+        let data = Bytes::from_static(&[0xFF, 0xFF, 0xFF, 0xFF, 0x0F]);
+        let mut reader = &data[..];
+        let result = read_packet(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(PingError::ReadPacket("packet too big"))
+        ));
+    }
 }
