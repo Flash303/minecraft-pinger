@@ -4,11 +4,10 @@ use crate::bedrock::protocol::{create_ping, read_response};
 use crate::common::dns::resolve_filtered_addrs;
 use crate::config::PingConfig;
 use crate::error::PingError;
-use bytes::Bytes;
 use log::debug;
 use std::time::Instant;
 use tokio::net::UdpSocket;
-use tokio::time::timeout;
+use tokio::time::{Instant as TokioInstant, timeout_at};
 
 impl MinecraftPinger {
     pub async fn ping_bedrock_server(
@@ -17,12 +16,9 @@ impl MinecraftPinger {
         port: u16,
         config: &PingConfig,
     ) -> Result<BedrockPing, PingError> {
-        let rs = timeout(
-            config.timeout(),
-            self.ping_bedrock_server_internal(ip, port, config),
-        )
-        .await??;
-        Ok(rs)
+        let deadline = TokioInstant::now() + config.timeout();
+        self.ping_bedrock_server_internal(ip, port, config, deadline)
+            .await
     }
 
     async fn ping_bedrock_server_internal(
@@ -30,24 +26,31 @@ impl MinecraftPinger {
         ip: &str,
         port: u16,
         config: &PingConfig,
+        deadline: TokioInstant,
     ) -> Result<BedrockPing, PingError> {
         debug!("Pinging bedrock server {}:{}", ip, port);
 
-        let (_, addrs) = resolve_filtered_addrs(self, ip, port, "udp", config.ip_filter()).await?;
+        let (_, addrs) = timeout_at(
+            deadline,
+            resolve_filtered_addrs(self, ip, port, "udp", config.ip_filter()),
+        )
+        .await??;
         let start_time = Instant::now();
 
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
-        timeout(config.timeout(), socket.connect(&addrs[..]))
+        timeout_at(deadline, socket.connect(&addrs[..]))
             .await?
             .map_err(|e| {
                 debug!("Connection error: {}", e);
                 PingError::ConnectionRefused
             })?;
 
-        let _ = socket.send(&create_ping()?).await;
+        timeout_at(deadline, socket.send(&create_ping()?))
+            .await?
+            .map_err(|_| PingError::SendPacket)?;
 
         let mut buffer = [0u8; 4096];
-        let len = timeout(config.timeout(), socket.recv(&mut buffer))
+        let len = timeout_at(deadline, socket.recv(&mut buffer))
             .await?
             .map_err(|_| PingError::ConnectionRefused)?;
 

@@ -10,7 +10,9 @@ use log::debug;
 use std::time::Instant;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::time::timeout;
+use tokio::time::{Instant as TokioInstant, timeout_at};
+
+const TCP_BUFFER_CAPACITY: usize = 512;
 
 impl MinecraftPinger {
     pub async fn ping_java_server(
@@ -19,12 +21,9 @@ impl MinecraftPinger {
         port: u16,
         config: &JavaPingConfig,
     ) -> Result<JavaPing, PingError> {
-        let rs = timeout(
-            config.common().timeout(),
-            self.ping_java_server_internal(ip, port, config),
-        )
-        .await??;
-        Ok(rs)
+        let deadline = TokioInstant::now() + config.common().timeout();
+        self.ping_java_server_internal(ip, port, config, deadline)
+            .await
     }
 
     async fn ping_java_server_internal(
@@ -32,29 +31,25 @@ impl MinecraftPinger {
         ip: &str,
         port: u16,
         config: &JavaPingConfig,
+        deadline: TokioInstant,
     ) -> Result<JavaPing, PingError> {
         debug!("Pinging server {}:{}", ip, port);
 
-        let (hostname, addrs) =
-            resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()).await?;
+        let (hostname, addrs) = timeout_at(
+            deadline,
+            resolve_filtered_addrs(self, ip, port, "tcp", config.common().ip_filter()),
+        )
+        .await??;
 
-        let stream_future = TcpStream::connect(&addrs[..]);
-        let mut stream = timeout(config.common().timeout(), stream_future)
+        let mut stream = timeout_at(deadline, TcpStream::connect(&addrs[..]))
             .await?
             .map_err(|e| {
                 debug!("Connection error: {}", e);
                 PingError::ConnectionRefused
             })?;
-
         stream.set_nodelay(true).unwrap_or_default();
 
-        debug!(
-            "Stream connected to {}",
-            stream
-                .peer_addr()
-                .map(|a| a.to_string())
-                .unwrap_or_else(|_| "unknown".to_string())
-        );
+        debug!("Stream connected to {:?}", stream.peer_addr().ok());
 
         let start_time = Instant::now();
 
@@ -71,16 +66,15 @@ impl MinecraftPinger {
         );
         write_ping_request(&mut buffer);
 
-        stream
-            .write_all(&buffer.freeze())
-            .await
+        timeout_at(deadline, stream.write_all(&buffer.freeze()))
+            .await?
             .map_err(|_| PingError::SendPacket)?;
         debug!("Stream all packets !");
 
         let connected_addr = stream.peer_addr().ok();
 
-        let mut buffered_reader = BufReader::new(&mut stream);
-        let mut packet = read_packet(&mut buffered_reader).await?;
+        let mut buffered_reader = BufReader::with_capacity(TCP_BUFFER_CAPACITY, &mut stream);
+        let mut packet = timeout_at(deadline, read_packet(&mut buffered_reader)).await??;
         debug!("Received Packet ID: {}", packet.id());
 
         let json = read_string(&mut packet.data)?;
