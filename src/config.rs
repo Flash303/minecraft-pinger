@@ -18,14 +18,6 @@ impl PingConfig {
         PingConfigBuilder::new()
     }
 
-    // Remove it ?
-    pub fn to_builder(&self) -> PingConfigBuilder {
-        PingConfigBuilder {
-            timeout: self.timeout,
-            ip_filter: self.ip_filter.clone(),
-        }
-    }
-
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
@@ -43,8 +35,8 @@ impl Default for PingConfig {
 
 #[derive(Clone)]
 pub struct PingConfigBuilder {
-    timeout: Duration,
-    ip_filter: Option<Arc<IpFilter>>,
+    pub(crate) timeout: Duration,
+    pub(crate) ip_filter: Option<Arc<IpFilter>>,
 }
 
 impl Default for PingConfigBuilder {
@@ -147,19 +139,5 @@ mod tests {
         let config = PingConfig::default();
         assert_eq!(config.timeout(), DEFAULT_TIMEOUT);
         assert!(config.ip_filter().is_none());
-    }
-
-    #[test]
-    fn test_ping_config_to_builder() {
-        let original = PingConfigBuilder::new()
-            .set_timeout(Duration::from_secs(10))
-            .deny_non_public_ips()
-            .build();
-
-        let builder = original.to_builder();
-        let rebuilt = builder.build();
-
-        assert_eq!(rebuilt.timeout(), Duration::from_secs(10));
-        assert!(rebuilt.ip_filter().is_some());
     }
 }

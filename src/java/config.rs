@@ -73,7 +73,10 @@ impl JavaPingConfigBuilder {
 
     pub fn from(config: &PingConfig) -> Self {
         JavaPingConfigBuilder {
-            common: config.to_builder(),
+            common: PingConfigBuilder {
+                timeout: config.timeout(),
+                ip_filter: config.ip_filter().cloned(),
+            },
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
             skip_favicon: false,
