@@ -515,7 +515,6 @@ dependencies = [
  "bytes",
  "hickory-resolver",
  "log",
- "rand",
  "serde",
  "serde_json",
  "thiserror",

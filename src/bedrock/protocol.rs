@@ -1,10 +1,12 @@
 use crate::bedrock::model::BedrockPing;
 use crate::error::PingError;
 use bytes::{BufMut, Bytes, BytesMut};
-use rand::Rng;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAGIC: u128 = 0x00ffff00fefefefefdfdfdfd12345678;
+
+static NEXT_GUID: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn create_ping() -> Result<Bytes, PingError> {
     let mut data = BytesMut::with_capacity(33);
@@ -17,11 +19,7 @@ pub(crate) fn create_ping() -> Result<Bytes, PingError> {
 
     data.put_u64(time);
     data.put_u128(MAGIC);
-
-    let mut guid = [0u8; 8];
-    rand::rng().fill_bytes(&mut guid);
-
-    data.put_slice(&guid);
+    data.put_u64(NEXT_GUID.fetch_add(1, Ordering::Relaxed));
 
     Ok(data.freeze())
 }
@@ -71,6 +69,13 @@ mod tests {
         assert!(!ping.is_empty());
         assert_eq!(ping.len(), 33); // 1 + 8 + 16 + 8
         assert_eq!(ping[0], 0x01);
+    }
+
+    #[test]
+    fn test_create_ping_guid_unique() {
+        let first = create_ping().unwrap();
+        let second = create_ping().unwrap();
+        assert_ne!(&first[25..33], &second[25..33]);
     }
 
     #[test]
