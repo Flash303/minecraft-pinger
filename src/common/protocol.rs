@@ -1,5 +1,5 @@
 use crate::error::PingError;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 pub const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;
 pub const CONTINUATION_BIT: u8 = 0x80;
@@ -40,17 +40,20 @@ macro_rules! decode_var_int {
     }};
 }
 
-pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
+pub(crate) fn read_var_int(buf: &mut impl Buf) -> Result<i32, PingError> {
     decode_var_int!(buf.try_get_u8(), "Read varint length (v1)")
 }
 
-pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
+pub(crate) fn read_string(buf: &mut BytesMut) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
         return Err(PingError::ReadPacket("Remaining < len"));
     }
-    let bytes = buf.split_to(len);
-    Ok(String::from_utf8(bytes.into())?)
+    // The JSON is the last field: truncate any trailing bytes, then take
+    // the whole buffer so its allocation is reused by the String.
+    buf.truncate(len);
+    let json = std::mem::replace(buf, BytesMut::new());
+    Ok(String::from_utf8(json.into())?)
 }
 
 #[cfg(test)]
@@ -106,24 +109,21 @@ mod tests {
     fn test_write_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "hello");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "hello");
+        assert_eq!(read_string(&mut buf).unwrap(), "hello");
     }
 
     #[test]
     fn test_write_empty_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "");
+        assert_eq!(read_string(&mut buf).unwrap(), "");
     }
 
     #[test]
     fn test_write_unicode_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "héllo 🌍");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "héllo 🌍");
+        assert_eq!(read_string(&mut buf).unwrap(), "héllo 🌍");
     }
 
     #[test]
@@ -143,8 +143,7 @@ mod tests {
         let mut buf = BytesMut::new();
         write_var_int(&mut buf, 10);
         buf.put_slice(b"hi");
-        let mut data = buf.freeze();
-        let result = read_string(&mut data);
+        let result = read_string(&mut buf);
         assert!(result.is_err());
     }
 }

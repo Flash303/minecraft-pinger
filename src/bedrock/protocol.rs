@@ -53,7 +53,9 @@ pub(crate) fn read_response(buffer: &mut &[u8]) -> Result<BedrockPing, PingError
 
     let string_data = take(buffer, string_size, "String data not found")?;
 
-    let str = String::from_utf8(string_data.to_vec())?;
+    let valid =
+        std::str::from_utf8(string_data).map_err(|_| PingError::ReadPacket("invalid utf-8"))?;
+    let str = valid.to_owned();
 
     str.try_into()
 }

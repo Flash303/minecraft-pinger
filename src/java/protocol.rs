@@ -3,7 +3,7 @@ use crate::common::protocol::{
 };
 use crate::error::PingError;
 use crate::error::PingError::ReadPacket;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
 
@@ -34,11 +34,11 @@ pub(crate) fn write_ping_request(buffer: &mut BytesMut) {
 
 pub(crate) struct Packet {
     id: u8,
-    pub data: Bytes,
+    pub data: BytesMut,
 }
 
 impl Packet {
-    pub fn new(id: u8, data: Bytes) -> Packet {
+    pub fn new(id: u8, data: BytesMut) -> Packet {
         Packet { id, data }
     }
 
@@ -103,7 +103,10 @@ pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
         fill_buf(stream, &mut buf).await?;
     }
 
-    let mut data = buf.split_to(length).freeze();
+    // Take the whole packet without splitting: split would share the
+    // allocation and force a copy later when building the JSON string.
+    let mut data = std::mem::replace(&mut buf, BytesMut::new());
+    data.truncate(length);
     let packet_id = read_var_int(&mut data)? as u8;
 
     Ok(Packet::new(packet_id, data))
@@ -143,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_packet_new_and_id() {
-        let packet = Packet::new(0x01, Bytes::from_static(b"test"));
+        let packet = Packet::new(0x01, BytesMut::from(&b"test"[..]));
         assert_eq!(packet.id(), 0x01);
     }
 
@@ -161,9 +164,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_packet_invalid_length() {
-        let data = Bytes::from_static(&[
-            0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
-        ]);
+        let data = BytesMut::from(
+            &[
+                0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
+            ][..],
+        );
         let mut reader = &data[..];
         let result = read_packet(&mut reader).await;
         assert!(result.is_err());
@@ -172,7 +177,7 @@ mod tests {
     #[tokio::test]
     async fn test_read_packet_too_big() {
         // VarInt(MAX_PACKET_SIZE + 1): rejected before any payload read.
-        let data = Bytes::from_static(&[0x81, 0x80, 0x40, 0x00]);
+        let data = BytesMut::from(&[0x81, 0x80, 0x40, 0x00][..]);
         let mut reader = &data[..];
         let result = read_packet(&mut reader).await;
         assert!(matches!(
@@ -184,7 +189,7 @@ mod tests {
     #[tokio::test]
     async fn test_read_packet_negative_length() {
         // VarInt(-1): rejected by the same guard.
-        let data = Bytes::from_static(&[0xFF, 0xFF, 0xFF, 0xFF, 0x0F]);
+        let data = BytesMut::from(&[0xFF, 0xFF, 0xFF, 0xFF, 0x0F][..]);
         let mut reader = &data[..];
         let result = read_packet(&mut reader).await;
         assert!(matches!(
