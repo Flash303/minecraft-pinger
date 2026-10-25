@@ -1,3 +1,4 @@
+pub use super::component::{Description, Player, PlayerField, Property, TextComponent};
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -91,111 +92,7 @@ impl From<RawJavaPing<Option<String>, Option<IgnoredAny>>> for JavaPing {
     }
 }
 
-// Components
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Description {
-    Plain(String),
-    Component(TextComponent),
-}
-
-impl Description {
-    pub fn to_plain_text(&self) -> String {
-        match self {
-            Description::Plain(s) => s.clone(),
-            Description::Component(c) => c.to_plain_text(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TextComponent {
-    Object {
-        #[serde(default)]
-        text: String,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        hat: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        player: Option<PlayerField>,
-        #[serde(skip_serializing_if = "Option::is_none", alias = "shadowColor")]
-        shadow_color: Option<i32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        atlas: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        sprite: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        bold: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        strikethrough: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        obfuscated: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        italic: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        underlined: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        font: Option<String>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        color: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        extra: Option<Vec<TextComponent>>,
-    },
-    String(String),
-    Array(Vec<TextComponent>),
-}
-
-impl TextComponent {
-    pub fn to_plain_text(&self) -> String {
-        let mut out = String::new();
-        self.write_plain_text(&mut out);
-        out
-    }
-
-    fn write_plain_text(&self, out: &mut String) {
-        match self {
-            TextComponent::String(s) => out.push_str(s),
-            TextComponent::Array(items) => {
-                for item in items {
-                    item.write_plain_text(out);
-                }
-            }
-            TextComponent::Object { text, extra, .. } => {
-                out.push_str(text);
-                if let Some(extra) = extra {
-                    for item in extra {
-                        item.write_plain_text(out);
-                    }
-                }
-            }
-        }
-    }
-}
-// Components end
-
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PlayerField {
-    Name(String),
-    Full(Player),
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Player {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<Vec<Property>>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Property {
-    pub name: String,
-    pub value: String,
-}
-
+// Components live in `super::component`, re-exported above.
 #[derive(Serialize, Deserialize)]
 pub struct Version {
     pub name: String,
@@ -337,34 +234,6 @@ mod tests {
     }
 
     #[test]
-    fn test_text_component_string_variant() {
-        let json = json!("simple string");
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-
-        match component {
-            TextComponent::String(s) => assert_eq!(s, "simple string"),
-            _ => panic!("Expected string variant"),
-        }
-    }
-
-    #[test]
-    fn test_text_component_array_variant() {
-        let json = json!([{"text": "part1"}, {"text": "part2"}]);
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-
-        match component {
-            TextComponent::Array(arr) => {
-                assert_eq!(arr.len(), 2);
-                match &arr[0] {
-                    TextComponent::Object { text, .. } => assert_eq!(text, "part1"),
-                    _ => panic!("Expected object"),
-                }
-            }
-            _ => panic!("Expected array variant"),
-        }
-    }
-
-    #[test]
     fn test_version_deserialize() {
         let json = json!({"name": "1.20.1", "protocol": 775});
         let version: Version = serde_json::from_value(json).unwrap();
@@ -387,30 +256,6 @@ mod tests {
         assert_eq!(players.online, 10);
         assert_eq!(players.max, 20);
         assert!(players.sample.is_some());
-    }
-
-    #[test]
-    fn test_description_to_plain_text_plain() {
-        let description = Description::Plain("A Minecraft Server".to_string());
-        assert_eq!(description.to_plain_text(), "A Minecraft Server");
-    }
-
-    #[test]
-    fn test_description_to_plain_text_component_with_extra() {
-        let json = json!({
-            "text": "Hello ",
-            "color": "green",
-            "extra": [{"text": "World"}, ["!", {"text": "!"}]]
-        });
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-        let description = Description::Component(component);
-        assert_eq!(description.to_plain_text(), "Hello World!!");
-    }
-
-    #[test]
-    fn test_text_component_to_plain_text_string_variant() {
-        let component = TextComponent::String("simple".to_string());
-        assert_eq!(component.to_plain_text(), "simple");
     }
 
     fn skipped_json() -> serde_json::Value {
