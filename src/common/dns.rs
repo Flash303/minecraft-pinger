@@ -51,10 +51,9 @@ pub(crate) async fn resolve_filtered_addrs(
     }
 
     if allowed.is_empty() {
-        return Err(PingError::BlockedEndpoint(format!(
-            "every resolved address was rejected: {:?}",
-            rejected.iter().map(|a| a.ip()).collect::<Vec<_>>()
-        )));
+        return Err(PingError::BlockedEndpoint(
+            rejected.iter().map(|addr| addr.ip()).collect(),
+        ));
     }
 
     Ok((override_hostname, allowed))
@@ -88,7 +87,8 @@ async fn resolve_all_addrs(
                     let addrs = resolver
                         .lookup_ip(target.clone())
                         .await
-                        .map(|ip_lookup| { // to socket
+                        .map(|ip_lookup| {
+                            // to socket
                             ip_lookup
                                 .iter()
                                 .map(|ip| SocketAddr::new(ip, port))
