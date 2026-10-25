@@ -14,6 +14,12 @@ use tokio::net::TcpStream;
 use tokio::time::{Instant as TokioInstant, timeout_at};
 
 impl MinecraftPinger {
+    /// Pings a Java-edition server (status handshake + request).
+    ///
+    /// Resolves `_minecraft._tcp.<host>` SRV first, falls back to A/AAAA,
+    /// applies the configured IP filter, then reports `latency` (ms) and
+    /// the address actually connected to. The whole call is bounded by
+    /// a single deadline derived from the configured timeout.
     pub async fn ping_java_server(
         &self,
         ip: &str,

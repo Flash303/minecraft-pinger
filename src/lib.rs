@@ -1,3 +1,26 @@
+//! High-performance, asynchronous Minecraft server pinger.
+//!
+//! Supports Java (status protocol) and Bedrock (unconnected pong) editions.
+//! [`MinecraftPinger`] owns the shared DNS resolver; clone it freely,
+//! it is cheap (`Arc`-backed).
+//!
+//! ```rust,no_run
+//! use minecraft_pinger::{MinecraftPinger, config::PingConfig};
+//! use minecraft_pinger::java::config::JavaPingConfig;
+//! use std::time::Duration;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let pinger = MinecraftPinger::new().unwrap();
+//!     let config = PingConfig::builder()
+//!         .set_timeout(Duration::from_secs(3))
+//!         .build();
+//!     let java_config = JavaPingConfig::from(&config).build();
+//!     let status = pinger.ping_java_server("mc.hypixel.net", 25565, &java_config).await.unwrap();
+//!     println!("{}: {}/{}", status.version.name, status.players.online, status.players.max);
+//! }
+//! ```
+
 pub mod common;
 pub mod config;
 pub mod error;
@@ -17,12 +40,17 @@ use hickory_resolver::config::{CLOUDFLARE, ResolverConfig};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use std::sync::Arc;
 
+/// Shared entry point for pinging Minecraft servers.
+///
+/// Holds the DNS resolver (SRV + A/AAAA, Cloudflare) behind an `Arc`,
+/// so cloning is cheap. Create once, reuse for batch scans.
 #[derive(Debug, Clone)]
 pub struct MinecraftPinger {
     dns_resolver: Arc<Resolver<TokioRuntimeProvider>>,
 }
 
 impl MinecraftPinger {
+    /// Builds a pinger with the default shared DNS resolver.
     pub fn new() -> Result<Self, PingError> {
         let resolver = Resolver::builder_with_config(
             ResolverConfig::udp_and_tcp(&CLOUDFLARE),

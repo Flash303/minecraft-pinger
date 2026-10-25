@@ -3,6 +3,7 @@ use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+/// Parsed Java status response plus measured `latency` (ms).
 #[derive(Serialize, Deserialize)]
 pub struct JavaPing {
     pub version: Version,

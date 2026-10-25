@@ -3,6 +3,8 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
+/// Server MOTD: either a legacy plain string or a JSON chat component.
+/// Deserialized in a single pass (no `untagged` retry).
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum Description {
@@ -63,6 +65,7 @@ impl<'de> Visitor<'de> for DescriptionVisitor {
 }
 
 impl Description {
+    /// Renders the MOTD as plain text (formatting codes stripped).
     pub fn to_plain_text(&self) -> String {
         match self {
             Description::Plain(s) => s.clone(),
@@ -71,6 +74,8 @@ impl Description {
     }
 }
 
+/// A JSON chat component: object, raw string, or nested array.
+/// Deserialized in a single pass (no `untagged` retry).
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum TextComponent {
@@ -201,6 +206,7 @@ impl<'de> Visitor<'de> for TextComponentVisitor {
 }
 
 impl TextComponent {
+    /// Renders the component (and nested `extra`) as plain text.
     pub fn to_plain_text(&self) -> String {
         let mut out = String::new();
         self.write_plain_text(&mut out);

@@ -11,6 +11,10 @@ use tokio::net::UdpSocket;
 use tokio::time::{Instant as TokioInstant, timeout_at};
 
 impl MinecraftPinger {
+    /// Pings a Bedrock server with a fresh UDP socket.
+    ///
+    /// For batch scans, prefer [`ping_bedrock_with_socket`](Self::ping_bedrock_with_socket)
+    /// on a shared socket instead of binding one socket per ping.
     pub async fn ping_bedrock_server(
         &self,
         ip: &str,
@@ -41,6 +45,14 @@ impl MinecraftPinger {
         Self::exchange(&socket, &addrs, deadline).await
     }
 
+    /// Pings a Bedrock server through a caller-provided UDP socket.
+    ///
+    /// Share one (or a pool of) `Arc<UdpSocket>` across scans to avoid
+    /// binding a socket and consuming an ephemeral port per ping.
+    /// Replies are matched by sender address; concurrent pings to the
+    /// *same* address on one socket cannot be told apart (the client
+    /// GUID is not echoed by the pong), so use one socket per concurrent
+    /// target or accept that ambiguity.
     pub async fn ping_bedrock_with_socket(
         &self,
         socket: &UdpSocket,

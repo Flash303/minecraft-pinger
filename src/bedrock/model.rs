@@ -2,6 +2,12 @@ use crate::error::PingError;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+/// Parsed Bedrock (RakNet unconnected pong) status.
+///
+/// Field order follows the `;`-separated pong string. Optional trailing
+/// fields are `None` when the server omits them. Parse from `&str`
+/// without intermediate allocation via `TryFrom<&str>` (`String` kept
+/// as a convenience wrapper).
 #[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct BedrockPing {

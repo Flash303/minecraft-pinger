@@ -1,6 +1,11 @@
 use crate::config::{DEFAULT_PROTOCOL_VERSION, PingConfig, PingConfigBuilder};
 use std::time::Duration;
 
+/// Java-edition ping settings: common [`PingConfig`] plus handshake options.
+///
+/// The `skip_*` flags avoid parsing (and allocating) the heaviest
+/// payload fields — useful for fleet scans that only need
+/// online/max counts and the MOTD.
 #[derive(Clone)]
 pub struct JavaPingConfig {
     common: PingConfig,
@@ -15,10 +20,12 @@ impl JavaPingConfig {
         JavaPingConfigBuilder::new()
     }
 
+    /// Builds from shared [`PingConfig`] settings (timeout, IP filter).
     pub fn from(config: &PingConfig) -> JavaPingConfigBuilder {
         JavaPingConfigBuilder::from(config)
     }
 
+    /// Protocol ID sent in the handshake (default: current supported version).
     pub fn protocol_version(&self) -> i32 {
         self.protocol_version
     }
@@ -27,14 +34,18 @@ impl JavaPingConfig {
         &self.common
     }
 
+    /// Hostname override sent in the handshake instead of the resolved name.
     pub fn hostname(&self) -> &Option<String> {
         &self.hostname
     }
 
+    /// When `true`, the `favicon` field is skipped while parsing
+    /// (saves a ~20–130 KB base64 allocation per server).
     pub fn skip_favicon(&self) -> bool {
         self.skip_favicon
     }
 
+    /// When `true`, the `players.sample` list is skipped while parsing.
     pub fn skip_sample(&self) -> bool {
         self.skip_sample
     }
@@ -104,11 +115,13 @@ impl JavaPingConfigBuilder {
         self
     }
 
+    /// Skips the `favicon` field while parsing.
     pub fn skip_favicon(mut self) -> Self {
         self.skip_favicon = true;
         self
     }
 
+    /// Skips the `players.sample` list while parsing.
     pub fn skip_sample(mut self) -> Self {
         self.skip_sample = true;
         self
