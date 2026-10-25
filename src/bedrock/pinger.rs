@@ -85,6 +85,7 @@ impl MinecraftPinger {
             .map_err(|_| PingError::SendPacket)?;
 
         // A shared socket may carry other traffic: only accept the target reply.
+        // A full buffer means the datagram may have been cut: reject it.
         let mut buffer = [0u8; 4096];
         let len = loop {
             let (len, from) = timeout_at(deadline, socket.recv_from(&mut buffer))
@@ -94,6 +95,9 @@ impl MinecraftPinger {
                 break len;
             }
         };
+        if len == buffer.len() {
+            return Err(PingError::ReadPacket("truncated response"));
+        }
 
         let mut response_bytes = &buffer[..len];
         let latency = start_time.elapsed().as_millis() as u32;
@@ -157,5 +161,29 @@ mod tests {
         assert_eq!(res.motd, "Test Server");
         assert_eq!(res.current_players, 10);
         assert_eq!(res.connected_addr.unwrap().port(), port);
+    }
+
+    #[tokio::test]
+    async fn ping_rejects_truncated_response() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let port = server.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            let mut buf = [0u8; 128];
+            let (_, from) = server.recv_from(&mut buf).await.unwrap();
+            server.send_to(&[0u8; 4096], from).await.unwrap();
+        });
+
+        let pinger = MinecraftPinger::new().unwrap();
+        let config = PingConfig::builder().build();
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+
+        let result = pinger
+            .ping_bedrock_with_socket(&socket, "127.0.0.1", port, &config)
+            .await;
+        assert!(matches!(
+            result,
+            Err(PingError::ReadPacket("truncated response"))
+        ));
     }
 }
