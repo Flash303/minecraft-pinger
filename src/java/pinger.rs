@@ -46,7 +46,7 @@ impl MinecraftPinger {
                 debug!("Connection error: {}", e);
                 PingError::ConnectionRefused
             })?;
-        stream.set_nodelay(true).unwrap_or_default();
+        let _ = stream.set_nodelay(true);
 
         debug!("Stream connected to {:?}", stream.peer_addr().ok());
 
