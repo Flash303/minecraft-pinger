@@ -46,14 +46,14 @@ impl MinecraftPinger {
 
         let _ = socket.send(&create_ping()?).await;
 
-        let mut buffer = [0u8; 1024];
+        let mut buffer = [0u8; 4096];
         let len = timeout(config.timeout(), socket.recv(&mut buffer))
             .await?
             .map_err(|_| PingError::ConnectionRefused)?;
 
         let connected_addr = socket.peer_addr().ok();
 
-        let mut response_bytes = Bytes::copy_from_slice(&buffer[..len]);
+        let mut response_bytes = &buffer[..len];
         let latency = start_time.elapsed().as_millis() as u32;
 
         let mut rs = read_response(&mut response_bytes)?;
