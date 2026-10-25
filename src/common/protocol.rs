@@ -45,12 +45,6 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
     decode_var_int!(buf.try_get_u8(), "Read varint length (v1)")
 }
 
-pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(
-    stream: &mut R,
-) -> Result<i32, PingError> {
-    decode_var_int!(stream.read_u8().await, "Read varint length (v2)")
-}
-
 pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {

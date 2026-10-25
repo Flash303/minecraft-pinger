@@ -1,9 +1,11 @@
-use crate::common::protocol::{read_var_int, read_var_int_stream, write_string, write_var_int};
+use crate::common::protocol::{
+    CONTINUATION_BIT, DATA_MASK, read_var_int, write_string, write_var_int,
+};
 use crate::error::PingError;
-use bytes::{BufMut, Bytes, BytesMut};
+use crate::error::PingError::ReadPacket;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
-use crate::error::PingError::ReadPacket;
 
 const MAX_PACKET_SIZE: usize = 1 << 20;
 
@@ -45,21 +47,63 @@ impl Packet {
     }
 }
 
+fn decode_var_int_prefix(buf: &[u8]) -> Result<Option<(i32, usize)>, PingError> {
+    let mut result = 0i32;
+    for (index, byte) in buf.iter().enumerate().take(5) {
+        result |= ((*byte & DATA_MASK) as i32) << (index * 7);
+        if *byte & CONTINUATION_BIT == 0 {
+            return Ok(Some((result, index + 1)));
+        }
+    }
+    if buf.len() >= 5 {
+        return Err(ReadPacket("Shift security".to_string()));
+    }
+    Ok(None)
+}
+
+#[inline]
+async fn fill_buf<R: AsyncReadExt + Unpin>(
+    stream: &mut R,
+    buf: &mut BytesMut,
+) -> Result<(), PingError> {
+    if stream.read_buf(buf).await.map_err(|e| {
+        debug!("Read packet error 2 {e}");
+        ReadPacket(e.to_string())
+    })? == 0
+    {
+        return Err(ReadPacket("Unexpected EOF".to_string()));
+    }
+    Ok(())
+}
+
 pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
     stream: &mut R,
 ) -> Result<Packet, PingError> {
-    let length = read_var_int_stream(stream).await?;
+    let mut buf = BytesMut::with_capacity(256);
+
+    // Reads in large chunks: the first read already holds
+    // the length VarInt and usually the whole packet.
+    let length = loop {
+        if let Some((value, width)) = decode_var_int_prefix(&buf)? {
+            buf.advance(width);
+            break value;
+        }
+        fill_buf(stream, &mut buf).await?;
+    };
     if length < 0 || length as usize > MAX_PACKET_SIZE {
-        return Err(ReadPacket("packet too big".to_string()))
+        return Err(ReadPacket("packet too big".to_string()));
     }
 
-    let mut buf = vec![0u8; length as usize];
-    stream.read_exact(&mut buf).await.map_err(|e| {
-        debug!("Read packet error 2 {e}");
-        ReadPacket(e.to_string())
-    })?;
+    let length = length as usize;
+    buf.reserve(length.saturating_sub(buf.len()));
 
-    let mut data = Bytes::from(buf);
+    // The payload start may already sit in memory,
+    // so only the missing bytes get fetched.
+    while buf.len() < length {
+        fill_buf(stream, &mut buf).await?;
+    }
+
+    let mut data = buf.split_to(length).freeze();
     let packet_id = read_var_int(&mut data)? as u8;
 
     Ok(Packet::new(packet_id, data))
@@ -69,7 +113,6 @@ pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
 mod tests {
     use super::*;
     use bytes::BytesMut;
-    use tokio::io::BufReader;
 
     #[test]
     fn test_write_ping_handshake() {
@@ -110,7 +153,7 @@ mod tests {
         write_ping_request(&mut buffer);
         let data = buffer.freeze();
 
-        let mut reader = BufReader::new(&data[..]);
+        let mut reader = &data[..];
         let packet = read_packet(&mut reader).await.unwrap();
 
         assert_eq!(packet.id(), 0x00);
@@ -121,7 +164,7 @@ mod tests {
         let data = Bytes::from_static(&[
             0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
         ]);
-        let mut reader = BufReader::new(&data[..]);
+        let mut reader = &data[..];
         let result = read_packet(&mut reader).await;
         assert!(result.is_err());
     }

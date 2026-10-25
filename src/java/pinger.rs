@@ -8,11 +8,9 @@ use crate::java::protocol::{read_packet, write_ping_handshake, write_ping_reques
 use bytes::BytesMut;
 use log::debug;
 use std::time::Instant;
-use tokio::io::{AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::time::{Instant as TokioInstant, timeout_at};
-
-const TCP_BUFFER_CAPACITY: usize = 512;
 
 impl MinecraftPinger {
     pub async fn ping_java_server(
@@ -73,8 +71,7 @@ impl MinecraftPinger {
 
         let connected_addr = stream.peer_addr().ok();
 
-        let mut buffered_reader = BufReader::with_capacity(TCP_BUFFER_CAPACITY, &mut stream);
-        let mut packet = timeout_at(deadline, read_packet(&mut buffered_reader)).await??;
+        let mut packet = timeout_at(deadline, read_packet(&mut stream)).await??;
         debug!("Received Packet ID: {}", packet.id());
 
         let json = read_string(&mut packet.data)?;
