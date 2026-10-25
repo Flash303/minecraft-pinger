@@ -91,7 +91,7 @@ fn test_ip_filter_private_ips() {
 #[test]
 fn test_bedrock_ping_parsing() {
     let response_str = "MCPE;Test Server;589;1.20.0;10;20;1234567890;world;Survival;1;19132;123";
-    let result = BedrockPing::try_from(response_str.to_string()).unwrap();
+    let result = BedrockPing::try_from(response_str).unwrap();
 
     assert_eq!(result.edition, "MCPE");
     assert_eq!(result.motd, "Test Server");
