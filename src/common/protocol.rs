@@ -5,6 +5,7 @@ pub const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;
 pub const CONTINUATION_BIT: u8 = 0x80;
 pub const DATA_MASK: u8 = 0x7F;
 
+#[inline]
 pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
     let mut ux = x as u32; // cast to u32 for logical shift
     while (ux & NEXT_BYTE_MASK) != 0 {
@@ -14,6 +15,7 @@ pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
     buffer.put_u8(ux as u8); // put the last, often 0x000..
 }
 
+#[inline]
 pub(crate) fn write_string(buffer: &mut BytesMut, string: &str) {
     write_var_int(buffer, string.len() as i32);
     buffer.put_slice(string.as_bytes());
@@ -40,10 +42,12 @@ macro_rules! decode_var_int {
     }};
 }
 
+#[inline]
 pub(crate) fn read_var_int(buf: &mut impl Buf) -> Result<i32, PingError> {
     decode_var_int!(buf.try_get_u8(), "Read varint length (v1)")
 }
 
+#[inline]
 pub(crate) fn read_string(buf: &mut BytesMut) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
