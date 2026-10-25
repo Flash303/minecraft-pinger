@@ -5,6 +5,7 @@ use hickory_resolver::net::NetError;
 use hickory_resolver::proto::ProtoError;
 use hickory_resolver::proto::rr::{Name, RData};
 use log::debug;
+use tokio::task::JoinSet;
 
 use crate::MinecraftPinger;
 use crate::common::ip_filter::IpFilter;
@@ -74,27 +75,39 @@ async fn resolve_all_addrs(
     if let Ok(srv_name) = parse_host(&srv_record)
         && let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_name).await
     {
-        let mut override_hostname: Option<String> = None;
+        let resolver = Arc::clone(&pinger.dns_resolver);
+        let mut lookups = JoinSet::new();
 
-        let mut all_addrs = Vec::new();
-        for record in lookup.answers() {
+        for (index, record) in lookup.answers().iter().enumerate() {
             if let RData::SRV(srv) = &record.data {
-                let srv_target = srv.target.to_string().trim_end_matches('.').to_string();
-                // if the srv target is not an ip, we use the subdomain as hostname
-                if !srv_target.parse::<IpAddr>().is_ok() {
-                    override_hostname = Some(srv_target.clone());
-                }
+                let target = srv.target.clone();
+                let port = srv.port;
+                let resolver = resolver.clone();
 
-                if let Ok(ip_lookup) = pinger.dns_resolver.lookup_ip(srv.target.clone()).await {
-                    let ips: Vec<SocketAddr> = ip_lookup
-                        .iter()
-                        .map(|ip| SocketAddr::new(ip, srv.port))
-                        .collect();
-
-                    all_addrs.extend(ips);
-                }
+                lookups.spawn(async move {
+                    let addrs = resolver
+                        .lookup_ip(target.clone())
+                        .await
+                        .map(|ip_lookup| { // to socket
+                            ip_lookup
+                                .iter()
+                                .map(|ip| SocketAddr::new(ip, port))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (index, target, addrs)
+                });
             }
         }
+
+        let mut resolved = Vec::new();
+        while let Some(outcome) = lookups.join_next().await {
+            if let Ok(entry) = outcome {
+                resolved.push(entry);
+            }
+        }
+
+        let (override_hostname, all_addrs) = collect_srv_addrs(resolved);
         if !all_addrs.is_empty() {
             return Ok((override_hostname, all_addrs));
         }
@@ -116,6 +129,25 @@ async fn resolve_all_addrs(
         return Err(PingError::DnsIpNotFound);
     }
     Ok((None, all_addrs))
+}
+
+fn collect_srv_addrs(
+    mut resolved: Vec<(usize, Name, Vec<SocketAddr>)>,
+) -> (Option<String>, Vec<SocketAddr>) {
+    // Tasks finish in any order: restore the SRV answer order first.
+    resolved.sort_by_key(|entry| entry.0);
+
+    let mut override_hostname = None;
+    let mut all_addrs = Vec::new();
+    for (_, target, addrs) in resolved {
+        let srv_target = target.to_string().trim_end_matches('.').to_owned();
+        // if the srv target is not an ip, we use the subdomain as hostname
+        if srv_target.parse::<IpAddr>().is_err() {
+            override_hostname = Some(srv_target);
+        }
+        all_addrs.extend(addrs);
+    }
+    (override_hostname, all_addrs)
 }
 
 #[cfg(test)]
@@ -236,5 +268,45 @@ mod tests {
 
         assert_eq!(allowed.len(), 2);
         assert!(rejected.is_empty());
+    }
+
+    #[test]
+    fn test_collect_srv_addrs_restores_answer_order() {
+        let resolved = vec![
+            (
+                1,
+                parse_host("mc2.example.com").unwrap(),
+                vec![SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)),
+                    25566,
+                )],
+            ),
+            (
+                0,
+                parse_host("mc1.example.com").unwrap(),
+                vec![SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
+                    25565,
+                )],
+            ),
+        ];
+
+        let (hostname, addrs) = collect_srv_addrs(resolved);
+
+        assert_eq!(hostname, Some("mc2.example.com".to_string()));
+        assert_eq!(
+            addrs,
+            vec![
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 25565),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)), 25566),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_collect_srv_addrs_empty() {
+        let (hostname, addrs) = collect_srv_addrs(Vec::new());
+        assert!(hostname.is_none());
+        assert!(addrs.is_empty());
     }
 }
