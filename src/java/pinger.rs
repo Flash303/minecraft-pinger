@@ -99,3 +99,82 @@ impl MinecraftPinger {
         Ok(as_res)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::protocol::{write_string, write_var_int};
+    use tokio::io::AsyncReadExt;
+    use tokio::net::TcpListener;
+
+    const STATUS_BODY: &str = "{\"version\":{\"name\":\"1.20.1\",\"protocol\":775},\"players\":{\"online\":5,\"max\":20,\"sample\":[{\"name\":\"Player1\",\"id\":\"uuid1\"}]},\"description\":\"Test\",\"favicon\":\"data:image/png;base64,abc123\"}";
+
+    async fn fake_server(listener: TcpListener, pings: usize) {
+        for _ in 0..pings {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 512];
+            let _ = socket.read(&mut buf).await.unwrap();
+
+            let mut payload = BytesMut::new();
+            write_var_int(&mut payload, 0);
+            write_string(&mut payload, STATUS_BODY);
+            let mut response = BytesMut::new();
+            write_var_int(&mut response, payload.len() as i32);
+            response.extend_from_slice(&payload);
+            socket.write_all(&response.freeze()).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn ping_loopback_skip_flags() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(fake_server(listener, 4));
+
+        let pinger = MinecraftPinger::new().unwrap();
+
+        let full = pinger
+            .ping_java_server("127.0.0.1", port, &JavaPingConfig::default())
+            .await
+            .unwrap();
+        assert!(full.favicon.is_some());
+        assert_eq!(full.players.sample.as_ref().unwrap().len(), 1);
+
+        let no_favicon = pinger
+            .ping_java_server(
+                "127.0.0.1",
+                port,
+                &JavaPingConfig::builder().skip_favicon().build(),
+            )
+            .await
+            .unwrap();
+        assert!(no_favicon.favicon.is_none());
+        assert!(no_favicon.players.sample.is_some());
+
+        let no_sample = pinger
+            .ping_java_server(
+                "127.0.0.1",
+                port,
+                &JavaPingConfig::builder().skip_sample().build(),
+            )
+            .await
+            .unwrap();
+        assert!(no_sample.favicon.is_some());
+        assert!(no_sample.players.sample.is_none());
+
+        let neither = pinger
+            .ping_java_server(
+                "127.0.0.1",
+                port,
+                &JavaPingConfig::builder()
+                    .skip_favicon()
+                    .skip_sample()
+                    .build(),
+            )
+            .await
+            .unwrap();
+        assert!(neither.favicon.is_none());
+        assert!(neither.players.sample.is_none());
+        assert_eq!(neither.version.name, "1.20.1");
+    }
+}
