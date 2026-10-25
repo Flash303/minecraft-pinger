@@ -128,7 +128,8 @@ fn test_config_builder_chaining() {
 fn test_java_ping_config_from_ping_config() {
     let base = PingConfigBuilder::new()
         .set_timeout(Duration::from_secs(10))
-        .deny_non_public_ips();
+        .deny_non_public_ips()
+        .build();
 
     let config = JavaPingConfigBuilder::from(&base).build();
 

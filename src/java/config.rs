@@ -15,7 +15,7 @@ impl JavaPingConfig {
         JavaPingConfigBuilder::new()
     }
 
-    pub fn from(config: &PingConfigBuilder) -> JavaPingConfigBuilder {
+    pub fn from(config: &PingConfig) -> JavaPingConfigBuilder {
         JavaPingConfigBuilder::from(config)
     }
 
@@ -71,9 +71,9 @@ impl JavaPingConfigBuilder {
         }
     }
 
-    pub fn from(config: &PingConfigBuilder) -> Self {
+    pub fn from(config: &PingConfig) -> Self {
         JavaPingConfigBuilder {
-            common: config.clone(),
+            common: config.to_builder(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
             skip_favicon: false,
@@ -183,10 +183,11 @@ mod tests {
     }
 
     #[test]
-    fn test_java_ping_config_builder_from_ping_config_builder() {
+    fn test_java_ping_config_builder_from_ping_config() {
         let base = PingConfigBuilder::new()
             .set_timeout(Duration::from_secs(10))
-            .deny_non_public_ips();
+            .deny_non_public_ips()
+            .build();
         let config = JavaPingConfigBuilder::from(&base).build();
         assert_eq!(config.common().timeout(), Duration::from_secs(10));
         assert!(config.common().ip_filter().is_some());

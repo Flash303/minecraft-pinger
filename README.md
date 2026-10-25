@@ -52,7 +52,7 @@ async fn main() {
         .deny_non_public_ips() // Prevent SSRF by dropping local/private IPs
         .build();
 
-    let java_config = JavaPingConfig::from(&config.to_builder())
+    let java_config = JavaPingConfig::from(&config)
         .set_protocol_version(763) // 1.20.1
         .build();
 
@@ -91,7 +91,7 @@ Configuration is managed via `PingConfig` for common properties and `JavaPingCon
 
 ### JavaPingConfig
 
-Created using `JavaPingConfig::from(&config.to_builder())` or `JavaPingConfig::builder()`.
+Created using `JavaPingConfig::from(&config)` or `JavaPingConfig::builder()`.
 
 | Builder Method | Type | Description |
 |----------------|------|-------------|
