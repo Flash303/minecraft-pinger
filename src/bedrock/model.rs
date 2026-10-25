@@ -1,6 +1,7 @@
 use crate::error::PingError;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::str::FromStr;
 
 /// Parsed Bedrock (RakNet unconnected pong) status.
 ///
@@ -31,10 +32,10 @@ pub struct BedrockPing {
     pub connected_addr: Option<SocketAddr>,
 }
 
-impl TryFrom<&str> for BedrockPing {
-    type Error = PingError;
+impl FromStr for BedrockPing {
+    type Err = PingError;
 
-    fn try_from(data: &str) -> Result<Self, Self::Error> {
+    fn from_str(data: &str) -> Result<Self, Self::Err> {
         let mut parts = data.split(';');
 
         let edition = parts.next().ok_or(PingError::ParseResponse)?.to_owned();
@@ -77,11 +78,19 @@ impl TryFrom<&str> for BedrockPing {
     }
 }
 
+impl TryFrom<&str> for BedrockPing {
+    type Error = PingError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        BedrockPing::from_str(value)
+    }
+}
+
 impl TryFrom<String> for BedrockPing {
     type Error = PingError;
 
     fn try_from(data: String) -> Result<Self, Self::Error> {
-        Self::try_from(data.as_str())
+        Self::from_str(data.as_str())
     }
 }
 
@@ -92,7 +101,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_full() {
         let data = "MCPE;Test Server;589;1.20.0;10;20;1234567890;world;Survival;1;19132;123";
-        let ping = BedrockPing::try_from(data).unwrap();
+        let ping = BedrockPing::from_str(data).unwrap();
 
         assert_eq!(ping.edition, "MCPE");
         assert_eq!(ping.motd, "Test Server");
@@ -112,7 +121,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_minimal() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890;world;Creative";
-        let ping = BedrockPing::try_from(data).unwrap();
+        let ping = BedrockPing::from_str(data).unwrap();
 
         assert_eq!(ping.edition, "MCPE");
         assert_eq!(ping.motd, "Test");
@@ -129,7 +138,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_empty_game_mode() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890;world";
-        let ping = BedrockPing::try_from(data).unwrap();
+        let ping = BedrockPing::from_str(data).unwrap();
 
         assert_eq!(ping.game_mode, "");
     }
@@ -137,7 +146,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_invalid_protocol_version() {
         let data = "MCPE;Test;invalid;1.20.0;0;20;1234567890;world";
-        let ping = BedrockPing::try_from(data).unwrap();
+        let ping = BedrockPing::from_str(data).unwrap();
 
         assert_eq!(ping.protocol_version, 0);
     }
@@ -145,7 +154,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_invalid_players() {
         let data = "MCPE;Test;589;1.20.0;invalid;invalid;1234567890;world";
-        let ping = BedrockPing::try_from(data).unwrap();
+        let ping = BedrockPing::from_str(data).unwrap();
 
         assert_eq!(ping.current_players, 0);
         assert_eq!(ping.max_players, 0);
@@ -162,7 +171,7 @@ mod tests {
     #[test]
     fn test_bedrock_ping_try_from_too_few_parts() {
         let data = "MCPE;Test;589;1.20.0;0;20;1234567890";
-        let result = BedrockPing::try_from(data);
+        let result = BedrockPing::from_str(data);
 
         assert!(result.is_err());
         match result.unwrap_err() {
