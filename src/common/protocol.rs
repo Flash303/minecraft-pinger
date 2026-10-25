@@ -16,6 +16,17 @@ pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
 }
 
 #[inline]
+pub(crate) fn var_int_len(x: i32) -> usize {
+    let mut ux = x as u32;
+    let mut len = 1;
+    while (ux & NEXT_BYTE_MASK) != 0 {
+        ux >>= 7;
+        len += 1;
+    }
+    len
+}
+
+#[inline]
 pub(crate) fn write_string(buffer: &mut BytesMut, string: &str) {
     write_var_int(buffer, string.len() as i32);
     buffer.put_slice(string.as_bytes());
@@ -128,6 +139,35 @@ mod tests {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "héllo 🌍");
         assert_eq!(read_string(&mut buf).unwrap(), "héllo 🌍");
+    }
+
+    #[test]
+    fn test_var_int_len_matches_encoding() {
+        let mut buf = BytesMut::new();
+        for value in 0..70000 {
+            buf.clear();
+            write_var_int(&mut buf, value);
+            assert_eq!(buf.len(), var_int_len(value));
+        }
+        for value in [
+            127,
+            128,
+            255,
+            16383,
+            16384,
+            2097151,
+            2097152,
+            268435455,
+            268435456,
+            i32::MAX,
+            -1,
+            -128,
+            i32::MIN,
+        ] {
+            buf.clear();
+            write_var_int(&mut buf, value);
+            assert_eq!(buf.len(), var_int_len(value));
+        }
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use crate::common::protocol::{
-    CONTINUATION_BIT, DATA_MASK, read_var_int, write_string, write_var_int,
+    CONTINUATION_BIT, DATA_MASK, read_var_int, var_int_len, write_string, write_var_int,
 };
 use crate::error::PingError;
 use crate::error::PingError::ReadPacket;
@@ -16,15 +16,18 @@ pub(crate) fn write_ping_handshake(
     port: &u16,
     protocol_version: &i32,
 ) {
-    let mut handshake = BytesMut::with_capacity(128);
-    handshake.put_u8(0x00);
-    write_var_int(&mut handshake, *protocol_version); // protocol version
-    write_string(&mut handshake, hostname);
-    handshake.put_u16(*port); // Server Port
-    write_var_int(&mut handshake, 1); // next state = 1 status
-
-    write_var_int(buffer, handshake.len() as i32);
-    buffer.put(handshake.freeze());
+    let payload_len = 1
+        + var_int_len(*protocol_version)
+        + var_int_len(hostname.len() as i32)
+        + hostname.len()
+        + 2
+        + var_int_len(1);
+    write_var_int(buffer, payload_len as i32);
+    buffer.put_u8(0x00);
+    write_var_int(buffer, *protocol_version); // protocol version
+    write_string(buffer, hostname);
+    buffer.put_u16(*port); // Server Port
+    write_var_int(buffer, 1); // next state = 1 status
 }
 
 pub(crate) fn write_ping_request(buffer: &mut BytesMut) {
