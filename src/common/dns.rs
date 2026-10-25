@@ -74,39 +74,35 @@ async fn resolve_all_addrs(
     if let Ok(srv_name) = parse_host(&srv_record)
         && let Ok(lookup) = pinger.dns_resolver.srv_lookup(srv_name).await
     {
+        // Every SRV target resolves concurrently: awaiting them one by one
+        // would stack a full DNS round-trip per record.
         let resolver = Arc::clone(&pinger.dns_resolver);
-        let mut lookups = JoinSet::new();
-
-        for (index, record) in lookup.answers().iter().enumerate() {
-            if let RData::SRV(srv) = &record.data {
-                let target = srv.target.clone();
-                let port = srv.port;
-                let resolver = resolver.clone();
-
-                lookups.spawn(async move {
-                    let addrs = resolver
-                        .lookup_ip(target.clone())
-                        .await
-                        .map(|ip_lookup| {
-                            // to socket
-                            ip_lookup
-                                .iter()
-                                .map(|ip| SocketAddr::new(ip, port))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    (index, target, addrs)
-                });
+        let targets: Vec<(usize, Name, u16)> = lookup
+            .answers()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, record)| match &record.data {
+                RData::SRV(srv) => Some((index, srv.target.clone(), srv.port)),
+                _ => None,
+            })
+            .collect();
+        let lookup_ip = Arc::new(move |target: Name, port: u16| {
+            let resolver = Arc::clone(&resolver);
+            async move {
+                resolver
+                    .lookup_ip(target)
+                    .await
+                    .map(|ip_lookup| {
+                        ip_lookup
+                            .iter()
+                            .map(|ip| SocketAddr::new(ip, port))
+                            .collect()
+                    })
+                    .unwrap_or_default()
             }
-        }
+        });
 
-        let mut resolved = Vec::new();
-        while let Some(outcome) = lookups.join_next().await {
-            if let Ok(entry) = outcome {
-                resolved.push(entry);
-            }
-        }
-
+        let resolved = lookup_all(targets, lookup_ip).await;
         let (override_hostname, all_addrs) = collect_srv_addrs(resolved);
         if !all_addrs.is_empty() {
             return Ok((override_hostname, all_addrs));
@@ -129,6 +125,32 @@ async fn resolve_all_addrs(
         return Err(PingError::DnsIpNotFound);
     }
     Ok((None, all_addrs))
+}
+
+async fn lookup_all<F, Fut>(
+    targets: Vec<(usize, Name, u16)>,
+    lookup: Arc<F>,
+) -> Vec<(usize, Name, Vec<SocketAddr>)>
+where
+    F: Fn(Name, u16) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Vec<SocketAddr>> + Send + 'static,
+{
+    let mut lookups = JoinSet::new();
+    for (index, target, port) in targets {
+        let lookup = Arc::clone(&lookup);
+        lookups.spawn(async move {
+            let addrs = lookup(target.clone(), port).await;
+            (index, target, addrs)
+        });
+    }
+
+    let mut resolved = Vec::new();
+    while let Some(outcome) = lookups.join_next().await {
+        if let Ok(entry) = outcome {
+            resolved.push(entry);
+        }
+    }
+    resolved
 }
 
 fn collect_srv_addrs(
@@ -308,5 +330,73 @@ mod tests {
         let (hostname, addrs) = collect_srv_addrs(Vec::new());
         assert!(hostname.is_none());
         assert!(addrs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_srv_lookups_run_concurrently() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let lookup = {
+            let active = Arc::clone(&active);
+            let peak = Arc::clone(&peak);
+            Arc::new(move |target: Name, port: u16| {
+                let active = Arc::clone(&active);
+                let peak = Arc::clone(&peak);
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    peak.fetch_max(current, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    let _ = target;
+                    vec![SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                        port,
+                    )]
+                }
+            })
+        };
+
+        let targets = vec![
+            (0, parse_host("mc1.example.com").unwrap(), 25565),
+            (1, parse_host("mc2.example.com").unwrap(), 25566),
+            (2, parse_host("mc3.example.com").unwrap(), 25567),
+        ];
+        let resolved = lookup_all(targets, lookup).await;
+        assert_eq!(peak.load(Ordering::SeqCst), 3);
+
+        let (hostname, addrs) = collect_srv_addrs(resolved);
+        assert_eq!(hostname, Some("mc3.example.com".to_string()));
+        assert_eq!(
+            addrs.iter().map(|addr| addr.port()).collect::<Vec<_>>(),
+            vec![25565, 25566, 25567]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_ip_literal_skips_dns() {
+        let pinger = MinecraftPinger::new().unwrap();
+        let (hostname, addrs) = resolve_all_addrs(&pinger, "127.0.0.1", 25565, "tcp")
+            .await
+            .unwrap();
+        assert!(hostname.is_none());
+        assert_eq!(
+            addrs,
+            vec![SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                25565
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resolve_filtered_addrs_blocks_private_ip() {
+        let pinger = MinecraftPinger::new().unwrap();
+        let filter: Arc<IpFilter> = Arc::new(is_public_ip);
+        let result =
+            resolve_filtered_addrs(&pinger, "127.0.0.1", 25565, "tcp", Some(&filter)).await;
+        assert!(matches!(result, Err(PingError::BlockedEndpoint(_))));
     }
 }
