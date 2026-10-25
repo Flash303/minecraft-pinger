@@ -51,7 +51,11 @@ async fn main() {
     let data = std::fs::read_to_string(&list_path).expect("read server list");
     let mut servers: Vec<Server> = serde_json::from_str(&data).expect("parse server list");
     servers.truncate(limit);
-    eprintln!("bench_fleet: {} servers, concurrency {}", servers.len(), concurrency);
+    eprintln!(
+        "bench_fleet: {} servers, concurrency {}",
+        servers.len(),
+        concurrency
+    );
 
     let pinger = MinecraftPinger::new().expect("pinger");
     let config = PingConfig::builder()
@@ -74,30 +78,35 @@ async fn main() {
         let java_config = java_config.clone();
         set.spawn(async move {
             let t = Instant::now();
-            let base = |ok: bool,
-                        latency_ms: Option<u32>,
-                        err: Option<String>,
-                        elapsed_ms: u64| Row {
-                ip: s.ip.clone(),
-                port: s.port,
-                kind: s.kind.clone(),
-                ok,
-                latency_ms,
-                elapsed_ms,
-                err,
-            };
+            let base =
+                |ok: bool, latency_ms: Option<u32>, err: Option<String>, elapsed_ms: u64| Row {
+                    ip: s.ip.clone(),
+                    port: s.port,
+                    kind: s.kind.clone(),
+                    ok,
+                    latency_ms,
+                    elapsed_ms,
+                    err,
+                };
             if s.kind == "bedrock" {
                 match pinger.ping_bedrock_server(&s.ip, s.port, &config).await {
                     Ok(r) => base(true, Some(r.latency), None, t.elapsed().as_millis() as u64),
-                    Err(e) => base(false, None, Some(format!("{e:?}")), t.elapsed().as_millis() as u64),
+                    Err(e) => base(
+                        false,
+                        None,
+                        Some(format!("{e:?}")),
+                        t.elapsed().as_millis() as u64,
+                    ),
                 }
             } else {
-                match pinger
-                    .ping_java_server(&s.ip, s.port, &java_config)
-                    .await
-                {
+                match pinger.ping_java_server(&s.ip, s.port, &java_config).await {
                     Ok(r) => base(true, Some(r.latency), None, t.elapsed().as_millis() as u64),
-                    Err(e) => base(false, None, Some(format!("{e:?}")), t.elapsed().as_millis() as u64),
+                    Err(e) => base(
+                        false,
+                        None,
+                        Some(format!("{e:?}")),
+                        t.elapsed().as_millis() as u64,
+                    ),
                 }
             }
         });
