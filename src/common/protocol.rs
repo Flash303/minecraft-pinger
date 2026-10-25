@@ -1,10 +1,11 @@
 use crate::error::PingError;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 pub const NEXT_BYTE_MASK: u32 = 0xFFFFFF80;
 pub const CONTINUATION_BIT: u8 = 0x80;
 pub const DATA_MASK: u8 = 0x7F;
 
+#[inline]
 pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
     let mut ux = x as u32; // cast to u32 for logical shift
     while (ux & NEXT_BYTE_MASK) != 0 {
@@ -14,6 +15,18 @@ pub(crate) fn write_var_int(buffer: &mut BytesMut, x: i32) {
     buffer.put_u8(ux as u8); // put the last, often 0x000..
 }
 
+#[inline]
+pub(crate) fn var_int_len(x: i32) -> usize {
+    let mut ux = x as u32;
+    let mut len = 1;
+    while (ux & NEXT_BYTE_MASK) != 0 {
+        ux >>= 7;
+        len += 1;
+    }
+    len
+}
+
+#[inline]
 pub(crate) fn write_string(buffer: &mut BytesMut, string: &str) {
     write_var_int(buffer, string.len() as i32);
     buffer.put_slice(string.as_bytes());
@@ -24,8 +37,7 @@ macro_rules! decode_var_int {
         let mut result = 0i32;
         let mut shift = 0;
         loop {
-            let byte =
-                $read_byte.map_err(|e| PingError::ReadPacket(format!("{} {e}", $err_msg)))?;
+            let byte = $read_byte.map_err(|_| PingError::ReadPacket($err_msg))?;
 
             result |= ((byte & DATA_MASK) as i32) << shift;
             if byte & CONTINUATION_BIT == 0 {
@@ -35,30 +47,28 @@ macro_rules! decode_var_int {
 
             // Security
             if shift >= 35 {
-                break Err(PingError::ReadPacket("Shift security".to_string()));
+                break Err(PingError::ReadPacket("Shift security"));
             }
         }
     }};
 }
 
-pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
+#[inline]
+pub(crate) fn read_var_int(buf: &mut impl Buf) -> Result<i32, PingError> {
     decode_var_int!(buf.try_get_u8(), "Read varint length (v1)")
 }
 
-pub(crate) async fn read_var_int_stream<R: tokio::io::AsyncReadExt + Unpin>(
-    stream: &mut R,
-) -> Result<i32, PingError> {
-    decode_var_int!(stream.read_u8().await, "Read varint length (v2)")
-}
-
-pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
+#[inline]
+pub(crate) fn read_string(buf: &mut BytesMut) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
-        return Err(PingError::ReadPacket("Remaining < len".to_string()));
+        return Err(PingError::ReadPacket("Remaining < len"));
     }
-    let bytes = buf.split_to(len);
-    String::from_utf8(bytes.into())
-        .map_err(|_| PingError::ReadPacket("Parse to string error".to_string()))
+    // The JSON is the last field: truncate any trailing bytes, then take
+    // the whole buffer so its allocation is reused by the String.
+    buf.truncate(len);
+    let json = std::mem::replace(buf, BytesMut::new());
+    Ok(String::from_utf8(json.into())?)
 }
 
 #[cfg(test)]
@@ -114,24 +124,50 @@ mod tests {
     fn test_write_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "hello");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "hello");
+        assert_eq!(read_string(&mut buf).unwrap(), "hello");
     }
 
     #[test]
     fn test_write_empty_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "");
+        assert_eq!(read_string(&mut buf).unwrap(), "");
     }
 
     #[test]
     fn test_write_unicode_string() {
         let mut buf = BytesMut::new();
         write_string(&mut buf, "héllo 🌍");
-        let mut data = buf.freeze();
-        assert_eq!(read_string(&mut data).unwrap(), "héllo 🌍");
+        assert_eq!(read_string(&mut buf).unwrap(), "héllo 🌍");
+    }
+
+    #[test]
+    fn test_var_int_len_matches_encoding() {
+        let mut buf = BytesMut::new();
+        for value in 0..70000 {
+            buf.clear();
+            write_var_int(&mut buf, value);
+            assert_eq!(buf.len(), var_int_len(value));
+        }
+        for value in [
+            127,
+            128,
+            255,
+            16383,
+            16384,
+            2097151,
+            2097152,
+            268435455,
+            268435456,
+            i32::MAX,
+            -1,
+            -128,
+            i32::MIN,
+        ] {
+            buf.clear();
+            write_var_int(&mut buf, value);
+            assert_eq!(buf.len(), var_int_len(value));
+        }
     }
 
     #[test]
@@ -151,8 +187,7 @@ mod tests {
         let mut buf = BytesMut::new();
         write_var_int(&mut buf, 10);
         buf.put_slice(b"hi");
-        let mut data = buf.freeze();
-        let result = read_string(&mut data);
+        let result = read_string(&mut buf);
         assert!(result.is_err());
     }
 }

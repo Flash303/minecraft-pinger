@@ -1,11 +1,18 @@
 use crate::config::{DEFAULT_PROTOCOL_VERSION, PingConfig, PingConfigBuilder};
 use std::time::Duration;
 
+/// Java-edition ping settings: common [`PingConfig`] plus handshake options.
+///
+/// The `skip_*` flags avoid parsing (and allocating) the heaviest
+/// payload fields — useful for fleet scans that only need
+/// online/max counts and the MOTD.
 #[derive(Clone)]
 pub struct JavaPingConfig {
     common: PingConfig,
     protocol_version: i32,
     hostname: Option<String>,
+    skip_favicon: bool,
+    skip_sample: bool,
 }
 
 impl JavaPingConfig {
@@ -13,10 +20,12 @@ impl JavaPingConfig {
         JavaPingConfigBuilder::new()
     }
 
-    pub fn from(config: &PingConfigBuilder) -> JavaPingConfigBuilder {
+    /// Builds from shared [`PingConfig`] settings (timeout, IP filter).
+    pub fn from(config: &PingConfig) -> JavaPingConfigBuilder {
         JavaPingConfigBuilder::from(config)
     }
 
+    /// Protocol ID sent in the handshake (default: current supported version).
     pub fn protocol_version(&self) -> i32 {
         self.protocol_version
     }
@@ -25,8 +34,20 @@ impl JavaPingConfig {
         &self.common
     }
 
+    /// Hostname override sent in the handshake instead of the resolved name.
     pub fn hostname(&self) -> &Option<String> {
         &self.hostname
+    }
+
+    /// When `true`, the `favicon` field is skipped while parsing
+    /// (saves a ~20–130 KB base64 allocation per server).
+    pub fn skip_favicon(&self) -> bool {
+        self.skip_favicon
+    }
+
+    /// When `true`, the `players.sample` list is skipped while parsing.
+    pub fn skip_sample(&self) -> bool {
+        self.skip_sample
     }
 }
 
@@ -40,6 +61,8 @@ pub struct JavaPingConfigBuilder {
     common: PingConfigBuilder,
     protocol_version: i32,
     hostname: Option<String>,
+    skip_favicon: bool,
+    skip_sample: bool,
 }
 
 impl Default for JavaPingConfigBuilder {
@@ -54,14 +77,21 @@ impl JavaPingConfigBuilder {
             common: PingConfigBuilder::new(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
+            skip_favicon: false,
+            skip_sample: false,
         }
     }
 
-    pub fn from(config: &PingConfigBuilder) -> Self {
+    pub fn from(config: &PingConfig) -> Self {
         JavaPingConfigBuilder {
-            common: config.clone(),
+            common: PingConfigBuilder {
+                timeout: config.timeout(),
+                ip_filter: config.ip_filter().cloned(),
+            },
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
+            skip_favicon: false,
+            skip_sample: false,
         }
     }
 
@@ -85,11 +115,25 @@ impl JavaPingConfigBuilder {
         self
     }
 
+    /// Skips the `favicon` field while parsing.
+    pub fn skip_favicon(mut self) -> Self {
+        self.skip_favicon = true;
+        self
+    }
+
+    /// Skips the `players.sample` list while parsing.
+    pub fn skip_sample(mut self) -> Self {
+        self.skip_sample = true;
+        self
+    }
+
     pub fn build(self) -> JavaPingConfig {
         JavaPingConfig {
             common: self.common.build(),
             hostname: self.hostname,
             protocol_version: self.protocol_version,
+            skip_favicon: self.skip_favicon,
+            skip_sample: self.skip_sample,
         }
     }
 }
@@ -138,10 +182,28 @@ mod tests {
     }
 
     #[test]
-    fn test_java_ping_config_builder_from_ping_config_builder() {
+    fn test_java_ping_config_builder_skip_flags_default_off() {
+        let config = JavaPingConfigBuilder::new().build();
+        assert!(!config.skip_favicon());
+        assert!(!config.skip_sample());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_skip_flags() {
+        let config = JavaPingConfigBuilder::new()
+            .skip_favicon()
+            .skip_sample()
+            .build();
+        assert!(config.skip_favicon());
+        assert!(config.skip_sample());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_from_ping_config() {
         let base = PingConfigBuilder::new()
             .set_timeout(Duration::from_secs(10))
-            .deny_non_public_ips();
+            .deny_non_public_ips()
+            .build();
         let config = JavaPingConfigBuilder::from(&base).build();
         assert_eq!(config.common().timeout(), Duration::from_secs(10));
         assert!(config.common().ip_filter().is_some());

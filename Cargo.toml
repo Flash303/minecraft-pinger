@@ -1,6 +1,6 @@
 [package]
 name = "minecraft-pinger"
-version = "0.1.10"
+version = "1.0.0"
 edition = "2024"
 description = "A high-performance, asynchronous Rust library for pinging Minecraft servers to retrieve status, players, and metadata."
 license = "MIT"
@@ -25,4 +25,3 @@ thiserror = "2.*"
 bytes = "1.*"
 
 log = "0.4.*"
-rand = "0.10.*"

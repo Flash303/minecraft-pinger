@@ -6,6 +6,7 @@ pub type IpFilter = dyn Fn(IpAddr) -> bool + Send + Sync;
 /// Returns true if the IP belongs to the public internet: excludes private
 /// ranges, loopback, link-local, CGNAT, documentation, benchmarking, multicast
 /// and reserved blocks.
+#[inline]
 pub fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => is_public_ipv4(v4),
@@ -13,6 +14,7 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
     }
 }
 
+#[inline]
 fn is_public_ipv4(ip: Ipv4Addr) -> bool {
     let o = ip.octets();
     !(
@@ -45,6 +47,7 @@ fn is_public_ipv4(ip: Ipv4Addr) -> bool {
     )
 }
 
+#[inline]
 fn is_public_ipv6(ip: Ipv6Addr) -> bool {
     // ::ffff:x.y.z.w - IPv4-mapped: apply IPv4 rules
     if let Some(mapped) = ip.to_ipv4_mapped() {

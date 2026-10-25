@@ -7,6 +7,10 @@ use crate::common::ip_filter::{IpFilter, is_public_ip};
 pub const DEFAULT_PROTOCOL_VERSION: i32 = 777;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// Common ping settings shared by the Java and Bedrock pingers.
+///
+/// Build with [`PingConfig::builder`]. Cheap to clone (the IP filter,
+/// if any, is behind an `Arc`).
 #[derive(Clone)]
 pub struct PingConfig {
     timeout: Duration,
@@ -18,18 +22,13 @@ impl PingConfig {
         PingConfigBuilder::new()
     }
 
-    // Remove it ?
-    pub fn to_builder(&self) -> PingConfigBuilder {
-        PingConfigBuilder {
-            timeout: self.timeout,
-            ip_filter: self.ip_filter.clone(),
-        }
-    }
-
+    /// Maximum time budget for a whole ping (DNS + connect + I/O).
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
 
+    /// The IP filter applied to resolved addresses, if any.
+    /// A ping is only attempted when at least one address is accepted.
     pub fn ip_filter(&self) -> Option<&Arc<IpFilter>> {
         self.ip_filter.as_ref()
     }
@@ -41,10 +40,11 @@ impl Default for PingConfig {
     }
 }
 
+/// Builder for [`PingConfig`].
 #[derive(Clone)]
 pub struct PingConfigBuilder {
-    timeout: Duration,
-    ip_filter: Option<Arc<IpFilter>>,
+    pub(crate) timeout: Duration,
+    pub(crate) ip_filter: Option<Arc<IpFilter>>,
 }
 
 impl Default for PingConfigBuilder {
@@ -61,16 +61,23 @@ impl PingConfigBuilder {
         }
     }
 
+    /// Sets the whole-ping time budget (default: 1 s).
     pub fn set_timeout(mut self, timeout: Duration) -> PingConfigBuilder {
         self.timeout = timeout;
         self
     }
 
+    /// Rejects non-public IPs (loopback, private, link-local, …).
+    /// This prevents SSRF: resolved addresses pointing at internal
+    /// infrastructure are refused before any connection is made.
     pub fn deny_non_public_ips(mut self) -> PingConfigBuilder {
         self.ip_filter = Some(Arc::new(is_public_ip));
         self
     }
 
+    /// Accepts a custom predicate over resolved IPs.
+    /// Returning `false` rejects the address; when every address is
+    /// rejected the ping fails with [`PingError::BlockedEndpoint`](crate::error::PingError::BlockedEndpoint).
     pub fn set_ip_filter<F>(mut self, filter: F) -> PingConfigBuilder
     where
         F: Fn(IpAddr) -> bool + Send + Sync + 'static,
@@ -147,19 +154,5 @@ mod tests {
         let config = PingConfig::default();
         assert_eq!(config.timeout(), DEFAULT_TIMEOUT);
         assert!(config.ip_filter().is_none());
-    }
-
-    #[test]
-    fn test_ping_config_to_builder() {
-        let original = PingConfigBuilder::new()
-            .set_timeout(Duration::from_secs(10))
-            .deny_non_public_ips()
-            .build();
-
-        let builder = original.to_builder();
-        let rebuilt = builder.build();
-
-        assert_eq!(rebuilt.timeout(), Duration::from_secs(10));
-        assert!(rebuilt.ip_filter().is_some());
     }
 }

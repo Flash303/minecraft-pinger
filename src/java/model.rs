@@ -1,6 +1,9 @@
+pub use super::component::{Description, Player, PlayerField, Property, TextComponent};
+use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+/// Parsed Java status response plus measured `latency` (ms).
 #[derive(Serialize, Deserialize)]
 pub struct JavaPing {
     pub version: Version,
@@ -17,111 +20,80 @@ pub struct JavaPing {
     pub connected_addr: Option<SocketAddr>,
 }
 
-// Components
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Description {
-    Plain(String),
-    Component(TextComponent),
+// Same payload as JavaPing, but favicon and player sample can be
+// replaced with IgnoredAny to skip their allocation while parsing.
+#[derive(Deserialize)]
+pub(crate) struct RawJavaPing<F, S> {
+    version: Version,
+    players: RawPlayers<S>,
+    description: Description,
+    favicon: F,
+    #[serde(rename = "modinfo")]
+    mod_info: Option<ModInfo>,
 }
 
-impl Description {
-    pub fn to_plain_text(&self) -> String {
-        match self {
-            Description::Plain(s) => s.clone(),
-            Description::Component(c) => c.to_plain_text(),
+#[derive(Deserialize)]
+pub(crate) struct RawPlayers<S> {
+    online: i32,
+    max: i32,
+    sample: S,
+}
+
+impl From<RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: None,
+            },
+            description: raw.description,
+            favicon: None,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TextComponent {
-    Object {
-        #[serde(default)]
-        text: String,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        hat: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        player: Option<PlayerField>,
-        #[serde(skip_serializing_if = "Option::is_none", alias = "shadowColor")]
-        shadow_color: Option<i32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        atlas: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        sprite: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        bold: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        strikethrough: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        obfuscated: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        italic: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        underlined: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        font: Option<String>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        color: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        extra: Option<Vec<TextComponent>>,
-    },
-    String(String),
-    Array(Vec<TextComponent>),
-}
-
-impl TextComponent {
-    pub fn to_plain_text(&self) -> String {
-        let mut out = String::new();
-        self.write_plain_text(&mut out);
-        out
-    }
-
-    fn write_plain_text(&self, out: &mut String) {
-        match self {
-            TextComponent::String(s) => out.push_str(s),
-            TextComponent::Array(items) => {
-                for item in items {
-                    item.write_plain_text(out);
-                }
-            }
-            TextComponent::Object { text, extra, .. } => {
-                out.push_str(text);
-                if let Some(extra) = extra {
-                    for item in extra {
-                        item.write_plain_text(out);
-                    }
-                }
-            }
+impl From<RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: raw.players.sample,
+            },
+            description: raw.description,
+            favicon: None,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
         }
     }
 }
-// Components end
 
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PlayerField {
-    Name(String),
-    Full(Player),
+impl From<RawJavaPing<Option<String>, Option<IgnoredAny>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<String>, Option<IgnoredAny>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: None,
+            },
+            description: raw.description,
+            favicon: raw.favicon,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Player {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<Vec<Property>>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Property {
-    pub name: String,
-    pub value: String,
-}
-
+// Components live in `super::component`, re-exported above.
 #[derive(Serialize, Deserialize)]
 pub struct Version {
     pub name: String,
@@ -263,34 +235,6 @@ mod tests {
     }
 
     #[test]
-    fn test_text_component_string_variant() {
-        let json = json!("simple string");
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-
-        match component {
-            TextComponent::String(s) => assert_eq!(s, "simple string"),
-            _ => panic!("Expected string variant"),
-        }
-    }
-
-    #[test]
-    fn test_text_component_array_variant() {
-        let json = json!([{"text": "part1"}, {"text": "part2"}]);
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-
-        match component {
-            TextComponent::Array(arr) => {
-                assert_eq!(arr.len(), 2);
-                match &arr[0] {
-                    TextComponent::Object { text, .. } => assert_eq!(text, "part1"),
-                    _ => panic!("Expected object"),
-                }
-            }
-            _ => panic!("Expected array variant"),
-        }
-    }
-
-    #[test]
     fn test_version_deserialize() {
         let json = json!({"name": "1.20.1", "protocol": 775});
         let version: Version = serde_json::from_value(json).unwrap();
@@ -315,27 +259,52 @@ mod tests {
         assert!(players.sample.is_some());
     }
 
-    #[test]
-    fn test_description_to_plain_text_plain() {
-        let description = Description::Plain("A Minecraft Server".to_string());
-        assert_eq!(description.to_plain_text(), "A Minecraft Server");
+    fn skipped_json() -> serde_json::Value {
+        json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "players": {
+                "online": 5,
+                "max": 20,
+                "sample": [{"name": "Player1", "id": "uuid1"}]
+            },
+            "description": "Test",
+            "favicon": "data:image/png;base64,abc123",
+            "modinfo": null
+        })
     }
 
     #[test]
-    fn test_description_to_plain_text_component_with_extra() {
-        let json = json!({
-            "text": "Hello ",
-            "color": "green",
-            "extra": [{"text": "World"}, ["!", {"text": "!"}]]
-        });
-        let component: TextComponent = serde_json::from_value(json).unwrap();
-        let description = Description::Component(component);
-        assert_eq!(description.to_plain_text(), "Hello World!!");
+    fn test_raw_ping_skip_favicon_only() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert!(ping.favicon.is_none());
+        assert_eq!(ping.players.sample.as_ref().unwrap().len(), 1);
+        assert_eq!(ping.version.name, "1.20.1");
     }
 
     #[test]
-    fn test_text_component_to_plain_text_string_variant() {
-        let component = TextComponent::String("simple".to_string());
-        assert_eq!(component.to_plain_text(), "simple");
+    fn test_raw_ping_skip_sample_only() {
+        let raw: RawJavaPing<Option<String>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert_eq!(
+            ping.favicon,
+            Some("data:image/png;base64,abc123".to_string())
+        );
+        assert!(ping.players.sample.is_none());
+    }
+
+    #[test]
+    fn test_raw_ping_skip_both() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert!(ping.favicon.is_none());
+        assert!(ping.players.sample.is_none());
+        assert_eq!(ping.players.online, 5);
     }
 }

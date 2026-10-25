@@ -1,18 +1,12 @@
 use crate::bedrock::model::BedrockPing;
 use crate::error::PingError;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use rand::Rng;
+use bytes::{BufMut, Bytes, BytesMut};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAGIC: u128 = 0x00ffff00fefefefefdfdfdfd12345678;
 
-fn try_split_to(buffer: &mut Bytes, size: usize) -> Option<Bytes> {
-    if buffer.len() >= size {
-        Some(buffer.split_to(size))
-    } else {
-        None
-    }
-}
+static NEXT_GUID: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn create_ping() -> Result<Bytes, PingError> {
     let mut data = BytesMut::with_capacity(33);
@@ -25,42 +19,44 @@ pub(crate) fn create_ping() -> Result<Bytes, PingError> {
 
     data.put_u64(time);
     data.put_u128(MAGIC);
-
-    let mut guid = [0u8; 8];
-    rand::rng().fill_bytes(&mut guid);
-
-    data.put_slice(&guid);
+    data.put_u64(NEXT_GUID.fetch_add(1, Ordering::Relaxed));
 
     Ok(data.freeze())
 }
 
-pub(crate) fn read_response(buffer: &mut Bytes) -> Result<BedrockPing, PingError> {
-    let _packet_id = buffer
-        .try_get_u8()
-        .map_err(|_| PingError::ReadPacket("Packet id not found".to_string()))?;
+#[inline]
+fn take<'a>(buffer: &mut &'a [u8], len: usize, err: &'static str) -> Result<&'a [u8], PingError> {
+    if buffer.len() < len {
+        return Err(PingError::ReadPacket(err));
+    }
+    let (head, tail) = buffer.split_at(len);
+    *buffer = tail;
+    Ok(head)
+}
 
-    let _timestamp = buffer
-        .try_get_u64()
-        .map_err(|_| PingError::ReadPacket("Timestamp not found".to_string()))?;
+pub(crate) fn read_response(buffer: &mut &[u8]) -> Result<BedrockPing, PingError> {
+    let _packet_id = take(buffer, 1, "Packet id not found")?[0];
+    let _timestamp =
+        u64::from_be_bytes(take(buffer, 8, "Timestamp not found")?.try_into().unwrap());
+    let _server_guid = u64::from_be_bytes(
+        take(buffer, 8, "Server guid not found")?
+            .try_into()
+            .unwrap(),
+    );
+    let _magic = u128::from_be_bytes(take(buffer, 16, "Magic id not found")?.try_into().unwrap());
 
-    let _server_guid = buffer
-        .try_get_u64()
-        .map_err(|_| PingError::ReadPacket("Server guid not found".to_string()))?;
+    let string_size = u16::from_be_bytes(
+        take(buffer, 2, "String size not found")?
+            .try_into()
+            .unwrap(),
+    ) as usize;
 
-    let _magic = buffer
-        .try_get_u128()
-        .map_err(|_| PingError::ReadPacket("Magic id not found".to_string()))?;
+    let string_data = take(buffer, string_size, "String data not found")?;
 
-    let string_size = buffer
-        .try_get_u16()
-        .map_err(|_| PingError::ReadPacket("String size not found".to_string()))?;
+    let valid =
+        std::str::from_utf8(string_data).map_err(|_| PingError::ReadPacket("invalid utf-8"))?;
 
-    let string_data = try_split_to(buffer, string_size as usize)
-        .ok_or(PingError::ReadPacket("String data not found".to_string()))?;
-
-    let str = String::from_utf8(string_data.into())?;
-
-    str.try_into()
+    valid.try_into()
 }
 
 #[cfg(test)]
@@ -77,6 +73,13 @@ mod tests {
     }
 
     #[test]
+    fn test_create_ping_guid_unique() {
+        let first = create_ping().unwrap();
+        let second = create_ping().unwrap();
+        assert_ne!(&first[25..33], &second[25..33]);
+    }
+
+    #[test]
     fn test_read_response_valid() {
         let mut buffer = BytesMut::new();
         buffer.put_u8(0x02); // packet id
@@ -89,8 +92,9 @@ mod tests {
         buffer.put_u16(response_str.len() as u16);
         buffer.put_slice(response_str.as_bytes());
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes).unwrap();
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice).unwrap();
 
         assert_eq!(result.edition, "MCPE");
         assert_eq!(result.motd, "Test Server");
@@ -118,8 +122,9 @@ mod tests {
         buffer.put_u16(response_str.len() as u16);
         buffer.put_slice(response_str.as_bytes());
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes).unwrap();
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice).unwrap();
 
         assert_eq!(result.edition, "MCPE");
         assert_eq!(result.motd, "Test");
@@ -136,8 +141,9 @@ mod tests {
         buffer.put_u64(1234567890);
         // Missing fields
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes);
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice);
         assert!(result.is_err());
     }
 
@@ -151,8 +157,9 @@ mod tests {
         buffer.put_u16(100); // String size larger than actual data
         buffer.put_slice(b"short");
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes);
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice);
         assert!(result.is_err());
     }
 
@@ -166,8 +173,9 @@ mod tests {
         buffer.put_u16(4);
         buffer.put_slice(&[0xFF, 0xFF, 0xFF, 0xFF]); // Invalid UTF-8
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes);
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice);
         assert!(result.is_err());
     }
 
@@ -183,8 +191,9 @@ mod tests {
         buffer.put_u16(response_str.len() as u16);
         buffer.put_slice(response_str.as_bytes());
 
-        let mut bytes = buffer.freeze();
-        let result = read_response(&mut bytes);
+        let bytes = buffer.freeze();
+        let mut slice: &[u8] = &bytes;
+        let result = read_response(&mut slice);
         assert!(result.is_err());
     }
 }

@@ -1,4 +1,5 @@
 use hickory_resolver::net::NetError;
+use std::net::IpAddr;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
@@ -18,7 +19,7 @@ pub enum PingError {
     SendPacket,
 
     #[error("Failed to read packet: {0}")]
-    ReadPacket(String),
+    ReadPacket(&'static str),
 
     #[error("Invalid UTF-8: {0}")]
     Utf8Error(#[from] FromUtf8Error),
@@ -41,8 +42,8 @@ pub enum PingError {
     #[error("Initialization error: {0}")]
     Init(String),
 
-    #[error("Endpoint blocked by IP filter: {0}")]
-    BlockedEndpoint(String),
+    #[error("Endpoint blocked by IP filter: {0:?}")]
+    BlockedEndpoint(Vec<IpAddr>),
 }
 
 #[cfg(test)]
@@ -86,7 +87,7 @@ mod tests {
 
     #[test]
     fn test_ping_error_read_packet() {
-        let ping_error = PingError::ReadPacket("test error".to_string());
+        let ping_error = PingError::ReadPacket("test error");
         assert_eq!(ping_error.to_string(), "Failed to read packet: test error");
     }
 
@@ -149,10 +150,10 @@ mod tests {
 
     #[test]
     fn test_ping_error_blocked_endpoint() {
-        let ping_error = PingError::BlockedEndpoint("10.0.0.1".to_string());
+        let ping_error = PingError::BlockedEndpoint(vec!["10.0.0.1".parse().unwrap()]);
         assert_eq!(
             ping_error.to_string(),
-            "Endpoint blocked by IP filter: 10.0.0.1"
+            "Endpoint blocked by IP filter: [10.0.0.1]"
         );
     }
 
