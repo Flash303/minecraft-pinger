@@ -26,24 +26,34 @@ pub(crate) fn create_ping() -> Result<Bytes, PingError> {
     Ok(data.freeze())
 }
 
+#[inline]
+fn take<'a>(buffer: &mut &'a [u8], len: usize, err: &'static str) -> Result<&'a [u8], PingError> {
+    if buffer.len() < len {
+        return Err(PingError::ReadPacket(err));
+    }
+    let (head, tail) = buffer.split_at(len);
+    *buffer = tail;
+    Ok(head)
+}
+
 pub(crate) fn read_response(buffer: &mut &[u8]) -> Result<BedrockPing, PingError> {
-    let mut take = |len: usize, err: &'static str| -> Result<&[u8], PingError> {
-        if buffer.len() < len {
-            return Err(PingError::ReadPacket(err));
-        }
-        let (head, tail) = buffer.split_at(len);
-        *buffer = tail;
-        Ok(head)
-    };
+    let _packet_id = take(buffer, 1, "Packet id not found")?[0];
+    let _timestamp =
+        u64::from_be_bytes(take(buffer, 8, "Timestamp not found")?.try_into().unwrap());
+    let _server_guid = u64::from_be_bytes(
+        take(buffer, 8, "Server guid not found")?
+            .try_into()
+            .unwrap(),
+    );
+    let _magic = u128::from_be_bytes(take(buffer, 16, "Magic id not found")?.try_into().unwrap());
 
-    let _packet_id = take(1, "Packet id not found")?[0];
-    let _timestamp = u64::from_be_bytes(take(8, "Timestamp not found")?.try_into().unwrap());
-    let _server_guid = u64::from_be_bytes(take(8, "Server guid not found")?.try_into().unwrap());
-    let _magic = u128::from_be_bytes(take(16, "Magic id not found")?.try_into().unwrap());
+    let string_size = u16::from_be_bytes(
+        take(buffer, 2, "String size not found")?
+            .try_into()
+            .unwrap(),
+    ) as usize;
 
-    let string_size = u16::from_be_bytes(take(2, "String size not found")?.try_into().unwrap()) as usize;
-
-    let string_data = take(string_size, "String data not found")?;
+    let string_data = take(buffer, string_size, "String data not found")?;
 
     let str = String::from_utf8(string_data.to_vec())?;
 
