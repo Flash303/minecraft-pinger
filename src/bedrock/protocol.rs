@@ -27,9 +27,9 @@ pub(crate) fn create_ping() -> Result<Bytes, PingError> {
 }
 
 pub(crate) fn read_response(buffer: &mut &[u8]) -> Result<BedrockPing, PingError> {
-    let mut take = |len: usize, err: &str| -> Result<&[u8], PingError> {
+    let mut take = |len: usize, err: &'static str| -> Result<&[u8], PingError> {
         if buffer.len() < len {
-            return Err(PingError::ReadPacket(err.to_string()));
+            return Err(PingError::ReadPacket(err));
         }
         let (head, tail) = buffer.split_at(len);
         *buffer = tail;

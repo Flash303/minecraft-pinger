@@ -18,7 +18,7 @@ pub enum PingError {
     SendPacket,
 
     #[error("Failed to read packet: {0}")]
-    ReadPacket(String),
+    ReadPacket(&'static str),
 
     #[error("Invalid UTF-8: {0}")]
     Utf8Error(#[from] FromUtf8Error),
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_ping_error_read_packet() {
-        let ping_error = PingError::ReadPacket("test error".to_string());
+        let ping_error = PingError::ReadPacket("test error");
         assert_eq!(ping_error.to_string(), "Failed to read packet: test error");
     }
 

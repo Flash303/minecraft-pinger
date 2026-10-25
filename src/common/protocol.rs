@@ -24,8 +24,7 @@ macro_rules! decode_var_int {
         let mut result = 0i32;
         let mut shift = 0;
         loop {
-            let byte =
-                $read_byte.map_err(|e| PingError::ReadPacket(format!("{} {e}", $err_msg)))?;
+            let byte = $read_byte.map_err(|_| PingError::ReadPacket($err_msg))?;
 
             result |= ((byte & DATA_MASK) as i32) << shift;
             if byte & CONTINUATION_BIT == 0 {
@@ -35,7 +34,7 @@ macro_rules! decode_var_int {
 
             // Security
             if shift >= 35 {
-                break Err(PingError::ReadPacket("Shift security".to_string()));
+                break Err(PingError::ReadPacket("Shift security"));
             }
         }
     }};
@@ -48,11 +47,10 @@ pub(crate) fn read_var_int(buf: &mut Bytes) -> Result<i32, PingError> {
 pub(crate) fn read_string(buf: &mut Bytes) -> Result<String, PingError> {
     let len = read_var_int(buf)? as usize;
     if buf.remaining() < len {
-        return Err(PingError::ReadPacket("Remaining < len".to_string()));
+        return Err(PingError::ReadPacket("Remaining < len"));
     }
     let bytes = buf.split_to(len);
-    String::from_utf8(bytes.into())
-        .map_err(|_| PingError::ReadPacket("Parse to string error".to_string()))
+    Ok(String::from_utf8(bytes.into())?)
 }
 
 #[cfg(test)]

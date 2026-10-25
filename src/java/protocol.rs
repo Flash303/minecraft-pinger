@@ -56,7 +56,7 @@ fn decode_var_int_prefix(buf: &[u8]) -> Result<Option<(i32, usize)>, PingError> 
         }
     }
     if buf.len() >= 5 {
-        return Err(ReadPacket("Shift security".to_string()));
+        return Err(ReadPacket("Shift security"));
     }
     Ok(None)
 }
@@ -68,10 +68,10 @@ async fn fill_buf<R: AsyncReadExt + Unpin>(
 ) -> Result<(), PingError> {
     if stream.read_buf(buf).await.map_err(|e| {
         debug!("Read packet error 2 {e}");
-        ReadPacket(e.to_string())
+        e
     })? == 0
     {
-        return Err(ReadPacket("Unexpected EOF".to_string()));
+        return Err(ReadPacket("Unexpected EOF"));
     }
     Ok(())
 }
@@ -91,7 +91,7 @@ pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
         fill_buf(stream, &mut buf).await?;
     };
     if length < 0 || length as usize > MAX_PACKET_SIZE {
-        return Err(ReadPacket("packet too big".to_string()));
+        return Err(ReadPacket("packet too big"));
     }
 
     let length = length as usize;
