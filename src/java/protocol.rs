@@ -3,6 +3,9 @@ use crate::error::PingError;
 use bytes::{BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::io::AsyncReadExt;
+use crate::error::PingError::ReadPacket;
+
+const MAX_PACKET_SIZE: usize = 1 << 20;
 
 // Packets
 pub(crate) fn write_ping_handshake(
@@ -46,17 +49,20 @@ pub(crate) async fn read_packet<R: AsyncReadExt + Unpin>(
     stream: &mut R,
 ) -> Result<Packet, PingError> {
     let length = read_var_int_stream(stream).await?;
+    if length < 0 || length as usize > MAX_PACKET_SIZE {
+        return Err(ReadPacket("packet too big".to_string()))
+    }
 
-    // Lire exactement `length` bytes
     let mut buf = vec![0u8; length as usize];
     stream.read_exact(&mut buf).await.map_err(|e| {
         debug!("Read packet error 2 {e}");
-        PingError::ReadPacket(e.to_string())
+        ReadPacket(e.to_string())
     })?;
 
     let mut data = Bytes::from(buf);
+    let packet_id = read_var_int(&mut data)? as u8;
 
-    Ok(Packet::new(read_var_int(&mut data)? as u8, data))
+    Ok(Packet::new(packet_id, data))
 }
 
 #[cfg(test)]
