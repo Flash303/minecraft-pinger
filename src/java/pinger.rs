@@ -3,10 +3,11 @@ use crate::common::dns::resolve_filtered_addrs;
 use crate::common::protocol::read_string;
 use crate::error::PingError;
 use crate::java::config::JavaPingConfig;
-use crate::java::model::JavaPing;
+use crate::java::model::{JavaPing, PlayerInfo, RawJavaPing};
 use crate::java::protocol::{read_packet, write_ping_handshake, write_ping_request};
 use bytes::BytesMut;
 use log::debug;
+use serde::de::IgnoredAny;
 use std::time::Instant;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -77,7 +78,21 @@ impl MinecraftPinger {
         let json = read_string(&mut packet.data)?;
         let latency = start_time.elapsed().as_millis() as u32;
 
-        let mut as_res = serde_json::from_str::<JavaPing>(&json)?;
+        let mut as_res: JavaPing = match (config.skip_favicon(), config.skip_sample()) {
+            (false, false) => serde_json::from_str(&json)?,
+            (true, false) => serde_json::from_str::<
+                RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>,
+            >(&json)?
+            .into(),
+            (false, true) => {
+                serde_json::from_str::<RawJavaPing<Option<String>, Option<IgnoredAny>>>(&json)?
+                    .into()
+            }
+            (true, true) => {
+                serde_json::from_str::<RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>>(&json)?
+                    .into()
+            }
+        };
 
         as_res.latency = latency;
         as_res.connected_addr = connected_addr;

@@ -6,6 +6,8 @@ pub struct JavaPingConfig {
     common: PingConfig,
     protocol_version: i32,
     hostname: Option<String>,
+    skip_favicon: bool,
+    skip_sample: bool,
 }
 
 impl JavaPingConfig {
@@ -28,6 +30,14 @@ impl JavaPingConfig {
     pub fn hostname(&self) -> &Option<String> {
         &self.hostname
     }
+
+    pub fn skip_favicon(&self) -> bool {
+        self.skip_favicon
+    }
+
+    pub fn skip_sample(&self) -> bool {
+        self.skip_sample
+    }
 }
 
 impl Default for JavaPingConfig {
@@ -40,6 +50,8 @@ pub struct JavaPingConfigBuilder {
     common: PingConfigBuilder,
     protocol_version: i32,
     hostname: Option<String>,
+    skip_favicon: bool,
+    skip_sample: bool,
 }
 
 impl Default for JavaPingConfigBuilder {
@@ -54,6 +66,8 @@ impl JavaPingConfigBuilder {
             common: PingConfigBuilder::new(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
+            skip_favicon: false,
+            skip_sample: false,
         }
     }
 
@@ -62,6 +76,8 @@ impl JavaPingConfigBuilder {
             common: config.clone(),
             protocol_version: DEFAULT_PROTOCOL_VERSION,
             hostname: None,
+            skip_favicon: false,
+            skip_sample: false,
         }
     }
 
@@ -85,11 +101,23 @@ impl JavaPingConfigBuilder {
         self
     }
 
+    pub fn skip_favicon(mut self) -> Self {
+        self.skip_favicon = true;
+        self
+    }
+
+    pub fn skip_sample(mut self) -> Self {
+        self.skip_sample = true;
+        self
+    }
+
     pub fn build(self) -> JavaPingConfig {
         JavaPingConfig {
             common: self.common.build(),
             hostname: self.hostname,
             protocol_version: self.protocol_version,
+            skip_favicon: self.skip_favicon,
+            skip_sample: self.skip_sample,
         }
     }
 }
@@ -135,6 +163,23 @@ mod tests {
     fn test_java_ping_config_builder_deny_non_public_ips() {
         let config = JavaPingConfigBuilder::new().deny_non_public_ips().build();
         assert!(config.common().ip_filter().is_some());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_skip_flags_default_off() {
+        let config = JavaPingConfigBuilder::new().build();
+        assert!(!config.skip_favicon());
+        assert!(!config.skip_sample());
+    }
+
+    #[test]
+    fn test_java_ping_config_builder_skip_flags() {
+        let config = JavaPingConfigBuilder::new()
+            .skip_favicon()
+            .skip_sample()
+            .build();
+        assert!(config.skip_favicon());
+        assert!(config.skip_sample());
     }
 
     #[test]

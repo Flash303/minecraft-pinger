@@ -1,3 +1,4 @@
+use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
@@ -15,6 +16,79 @@ pub struct JavaPing {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub connected_addr: Option<SocketAddr>,
+}
+
+// Same payload as JavaPing, but favicon and player sample can be
+// replaced with IgnoredAny to skip their allocation while parsing.
+#[derive(Deserialize)]
+pub(crate) struct RawJavaPing<F, S> {
+    version: Version,
+    players: RawPlayers<S>,
+    description: Description,
+    favicon: F,
+    #[serde(rename = "modinfo")]
+    mod_info: Option<ModInfo>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RawPlayers<S> {
+    online: i32,
+    max: i32,
+    sample: S,
+}
+
+impl From<RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: None,
+            },
+            description: raw.description,
+            favicon: None,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
+        }
+    }
+}
+
+impl From<RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: raw.players.sample,
+            },
+            description: raw.description,
+            favicon: None,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
+        }
+    }
+}
+
+impl From<RawJavaPing<Option<String>, Option<IgnoredAny>>> for JavaPing {
+    fn from(raw: RawJavaPing<Option<String>, Option<IgnoredAny>>) -> Self {
+        JavaPing {
+            version: raw.version,
+            players: Players {
+                online: raw.players.online,
+                max: raw.players.max,
+                sample: None,
+            },
+            description: raw.description,
+            favicon: raw.favicon,
+            mod_info: raw.mod_info,
+            latency: 0,
+            connected_addr: None,
+        }
+    }
 }
 
 // Components
@@ -337,5 +411,54 @@ mod tests {
     fn test_text_component_to_plain_text_string_variant() {
         let component = TextComponent::String("simple".to_string());
         assert_eq!(component.to_plain_text(), "simple");
+    }
+
+    fn skipped_json() -> serde_json::Value {
+        json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "players": {
+                "online": 5,
+                "max": 20,
+                "sample": [{"name": "Player1", "id": "uuid1"}]
+            },
+            "description": "Test",
+            "favicon": "data:image/png;base64,abc123",
+            "modinfo": null
+        })
+    }
+
+    #[test]
+    fn test_raw_ping_skip_favicon_only() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert!(ping.favicon.is_none());
+        assert_eq!(ping.players.sample.as_ref().unwrap().len(), 1);
+        assert_eq!(ping.version.name, "1.20.1");
+    }
+
+    #[test]
+    fn test_raw_ping_skip_sample_only() {
+        let raw: RawJavaPing<Option<String>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert_eq!(
+            ping.favicon,
+            Some("data:image/png;base64,abc123".to_string())
+        );
+        assert!(ping.players.sample.is_none());
+    }
+
+    #[test]
+    fn test_raw_ping_skip_both() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json()).unwrap();
+        let ping = JavaPing::from(raw);
+
+        assert!(ping.favicon.is_none());
+        assert!(ping.players.sample.is_none());
+        assert_eq!(ping.players.online, 5);
     }
 }
