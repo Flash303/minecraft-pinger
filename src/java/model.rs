@@ -7,10 +7,12 @@ use std::net::SocketAddr;
 #[derive(Serialize, Deserialize)]
 pub struct JavaPing {
     pub version: Version,
-    pub players: Players,
+    #[serde(default)]
+    pub players: Option<Players>,
     pub description: Description,
+    #[serde(default)]
     pub favicon: Option<String>,
-    #[serde(rename = "modinfo")]
+    #[serde(rename = "modinfo", default)]
     pub mod_info: Option<ModInfo>,
 
     #[serde(default)]
@@ -25,10 +27,12 @@ pub struct JavaPing {
 #[derive(Deserialize)]
 pub(crate) struct RawJavaPing<F, S> {
     version: Version,
-    players: RawPlayers<S>,
+    #[serde(default)]
+    players: Option<RawPlayers<S>>,
     description: Description,
+    #[serde(default)]
     favicon: F,
-    #[serde(rename = "modinfo")]
+    #[serde(rename = "modinfo", default)]
     mod_info: Option<ModInfo>,
 }
 
@@ -36,6 +40,7 @@ pub(crate) struct RawJavaPing<F, S> {
 pub(crate) struct RawPlayers<S> {
     online: i32,
     max: i32,
+    #[serde(default)]
     sample: S,
 }
 
@@ -43,11 +48,11 @@ impl From<RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>> for JavaPing {
     fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>>) -> Self {
         JavaPing {
             version: raw.version,
-            players: Players {
-                online: raw.players.online,
-                max: raw.players.max,
+            players: raw.players.map(|p| Players {
+                online: p.online,
+                max: p.max,
                 sample: None,
-            },
+            }),
             description: raw.description,
             favicon: None,
             mod_info: raw.mod_info,
@@ -61,11 +66,11 @@ impl From<RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>> for JavaPing
     fn from(raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>>) -> Self {
         JavaPing {
             version: raw.version,
-            players: Players {
-                online: raw.players.online,
-                max: raw.players.max,
-                sample: raw.players.sample,
-            },
+            players: raw.players.map(|p| Players {
+                online: p.online,
+                max: p.max,
+                sample: p.sample,
+            }),
             description: raw.description,
             favicon: None,
             mod_info: raw.mod_info,
@@ -79,11 +84,11 @@ impl From<RawJavaPing<Option<String>, Option<IgnoredAny>>> for JavaPing {
     fn from(raw: RawJavaPing<Option<String>, Option<IgnoredAny>>) -> Self {
         JavaPing {
             version: raw.version,
-            players: Players {
-                online: raw.players.online,
-                max: raw.players.max,
+            players: raw.players.map(|p| Players {
+                online: p.online,
+                max: p.max,
                 sample: None,
-            },
+            }),
             description: raw.description,
             favicon: raw.favicon,
             mod_info: raw.mod_info,
@@ -104,6 +109,7 @@ pub struct Version {
 pub struct Players {
     pub online: i32,
     pub max: i32,
+    #[serde(default)]
     pub sample: Option<Vec<PlayerInfo>>,
 }
 
@@ -146,8 +152,9 @@ mod tests {
         let ping: JavaPing = serde_json::from_value(json).unwrap();
         assert_eq!(ping.version.name, "1.20.1");
         assert_eq!(ping.version.protocol, Some(775));
-        assert_eq!(ping.players.online, 5);
-        assert_eq!(ping.players.max, 20);
+        let players = ping.players.as_ref().expect("players should be present");
+        assert_eq!(players.online, 5);
+        assert_eq!(players.max, 20);
 
         match ping.description {
             Description::Plain(s) => assert_eq!(s, "A Minecraft Server"),
@@ -230,8 +237,9 @@ mod tests {
         });
 
         let ping: JavaPing = serde_json::from_value(json).unwrap();
-        assert_eq!(ping.players.sample.as_ref().unwrap().len(), 2);
-        assert_eq!(ping.players.sample.as_ref().unwrap()[0].name, "Player1");
+        let players = ping.players.as_ref().expect("players should be present");
+        assert_eq!(players.sample.as_ref().unwrap().len(), 2);
+        assert_eq!(players.sample.as_ref().unwrap()[0].name, "Player1");
     }
 
     #[test]
@@ -280,7 +288,8 @@ mod tests {
         let ping = JavaPing::from(raw);
 
         assert!(ping.favicon.is_none());
-        assert_eq!(ping.players.sample.as_ref().unwrap().len(), 1);
+        let players = ping.players.as_ref().expect("players should be present");
+        assert_eq!(players.sample.as_ref().unwrap().len(), 1);
         assert_eq!(ping.version.name, "1.20.1");
     }
 
@@ -294,7 +303,8 @@ mod tests {
             ping.favicon,
             Some("data:image/png;base64,abc123".to_string())
         );
-        assert!(ping.players.sample.is_none());
+        let players = ping.players.as_ref().expect("players should be present");
+        assert!(players.sample.is_none());
     }
 
     #[test]
@@ -304,7 +314,113 @@ mod tests {
         let ping = JavaPing::from(raw);
 
         assert!(ping.favicon.is_none());
-        assert!(ping.players.sample.is_none());
-        assert_eq!(ping.players.online, 5);
+        let players = ping.players.as_ref().expect("players should be present");
+        assert!(players.sample.is_none());
+        assert_eq!(players.online, 5);
+    }
+
+    #[test]
+    fn test_java_ping_without_players_field() {
+        // Regression test: some servers (e.g. Eldium) omit `players` entirely.
+        // Used to fail with `missing field 'players'`.
+        let json = json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "description": "A Minecraft Server"
+        });
+
+        let ping: JavaPing = serde_json::from_value(json).unwrap();
+        assert!(ping.players.is_none());
+        assert_eq!(ping.version.name, "1.20.1");
+    }
+
+    #[test]
+    fn test_java_ping_with_null_players_field() {
+        let json = json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "players": null,
+            "description": "A Minecraft Server"
+        });
+
+        let ping: JavaPing = serde_json::from_value(json).unwrap();
+        assert!(ping.players.is_none());
+    }
+
+    #[test]
+    fn test_java_ping_with_players_missing_sample() {
+        // `sample` is optional inside `players`.
+        let json = json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "players": {"online": 5, "max": 20},
+            "description": "Test"
+        });
+
+        let ping: JavaPing = serde_json::from_value(json).unwrap();
+        let players = ping.players.as_ref().expect("players should be present");
+        assert_eq!(players.online, 5);
+        assert_eq!(players.max, 20);
+        assert!(players.sample.is_none());
+    }
+
+    #[test]
+    fn test_java_ping_without_players_from_str() {
+        // Same as the Eldium failure, but through `from_str` like the pinger does.
+        let raw = r#"{"version":{"name":"Eldium","protocol":766},"description":"play.eldium.fr"}"#;
+        let ping: JavaPing = serde_json::from_str(raw).unwrap();
+        assert!(ping.players.is_none());
+        assert_eq!(ping.version.name, "Eldium");
+    }
+
+    fn skipped_json_without_players() -> serde_json::Value {
+        json!({
+            "version": {"name": "1.20.1", "protocol": 775},
+            "description": "Test",
+            "favicon": "data:image/png;base64,abc123",
+            "modinfo": null
+        })
+    }
+
+    #[test]
+    fn test_raw_ping_without_players_full() {
+        let ping: JavaPing =
+            serde_json::from_value(skipped_json_without_players()).unwrap();
+        assert!(ping.players.is_none());
+    }
+
+    #[test]
+    fn test_raw_ping_without_players_skip_favicon_only() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<Vec<PlayerInfo>>> =
+            serde_json::from_value(skipped_json_without_players()).unwrap();
+        let ping = JavaPing::from(raw);
+        assert!(ping.players.is_none());
+        assert!(ping.favicon.is_none());
+    }
+
+    #[test]
+    fn test_raw_ping_without_players_skip_sample_only() {
+        let raw: RawJavaPing<Option<String>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json_without_players()).unwrap();
+        let ping = JavaPing::from(raw);
+        assert!(ping.players.is_none());
+        assert_eq!(
+            ping.favicon,
+            Some("data:image/png;base64,abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_raw_ping_without_players_skip_both() {
+        let raw: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>> =
+            serde_json::from_value(skipped_json_without_players()).unwrap();
+        let ping = JavaPing::from(raw);
+        assert!(ping.players.is_none());
+        assert!(ping.favicon.is_none());
+    }
+
+    #[test]
+    fn test_raw_ping_without_players_explicit_null() {
+        let mut value = skipped_json_without_players();
+        value["players"] = serde_json::Value::Null;
+        let ping: JavaPing = serde_json::from_value(value).unwrap();
+        assert!(ping.players.is_none());
     }
 }

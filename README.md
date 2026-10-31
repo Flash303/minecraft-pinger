@@ -60,7 +60,10 @@ async fn main() {
     match pinger.ping_java_server("mc.hypixel.net", 25565, &java_config).await {
         Ok(response) => {
             println!("Server: {}", response.version.name);
-            println!("Players: {}/{}", response.players.online, response.players.max);
+            match &response.players {
+                Some(players) => println!("Players: {}/{}", players.online, players.max),
+                None => println!("Players: unknown (server did not report them)"),
+            }
             println!("MOTD: {}", response.description.to_plain_text());
         }
         Err(e) => eprintln!("Java Ping failed: {:?}", e),

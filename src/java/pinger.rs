@@ -116,6 +116,10 @@ mod tests {
     const STATUS_BODY: &str = "{\"version\":{\"name\":\"1.20.1\",\"protocol\":775},\"players\":{\"online\":5,\"max\":20,\"sample\":[{\"name\":\"Player1\",\"id\":\"uuid1\"}]},\"description\":\"Test\",\"favicon\":\"data:image/png;base64,abc123\"}";
 
     async fn fake_server(listener: TcpListener, pings: usize) {
+        fake_server_with_body(listener, pings, STATUS_BODY).await;
+    }
+
+    async fn fake_server_with_body(listener: TcpListener, pings: usize, body: &'static str) {
         for _ in 0..pings {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut buf = [0u8; 512];
@@ -123,7 +127,7 @@ mod tests {
 
             let mut payload = BytesMut::new();
             write_var_int(&mut payload, 0);
-            write_string(&mut payload, STATUS_BODY);
+            write_string(&mut payload, body);
             let mut response = BytesMut::new();
             write_var_int(&mut response, payload.len() as i32);
             response.extend_from_slice(&payload);
@@ -144,7 +148,16 @@ mod tests {
             .await
             .unwrap();
         assert!(full.favicon.is_some());
-        assert_eq!(full.players.sample.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            full.players
+                .as_ref()
+                .expect("players should be present")
+                .sample
+                .as_ref()
+                .unwrap()
+                .len(),
+            1
+        );
 
         let no_favicon = pinger
             .ping_java_server(
@@ -155,7 +168,14 @@ mod tests {
             .await
             .unwrap();
         assert!(no_favicon.favicon.is_none());
-        assert!(no_favicon.players.sample.is_some());
+        assert!(
+            no_favicon
+                .players
+                .as_ref()
+                .expect("players should be present")
+                .sample
+                .is_some()
+        );
 
         let no_sample = pinger
             .ping_java_server(
@@ -166,7 +186,14 @@ mod tests {
             .await
             .unwrap();
         assert!(no_sample.favicon.is_some());
-        assert!(no_sample.players.sample.is_none());
+        assert!(
+            no_sample
+                .players
+                .as_ref()
+                .expect("players should be present")
+                .sample
+                .is_none()
+        );
 
         let neither = pinger
             .ping_java_server(
@@ -180,7 +207,67 @@ mod tests {
             .await
             .unwrap();
         assert!(neither.favicon.is_none());
-        assert!(neither.players.sample.is_none());
+        assert!(
+            neither
+                .players
+                .as_ref()
+                .expect("players should be present")
+                .sample
+                .is_none()
+        );
         assert_eq!(neither.version.name, "1.20.1");
+    }
+
+    const STATUS_BODY_NO_PLAYERS: &str = "{\"version\":{\"name\":\"Eldium\",\"protocol\":766},\"description\":\"play.eldium.fr\"}";
+
+    #[tokio::test]
+    async fn ping_loopback_without_players() {
+        // Regression test for `missing field 'players'` (Eldium-style payload).
+        for (skip_favicon, skip_sample) in
+            [(false, false), (true, false), (false, true), (true, true)]
+        {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            tokio::spawn(fake_server_with_body(
+                listener,
+                1,
+                STATUS_BODY_NO_PLAYERS,
+            ));
+
+            let pinger = MinecraftPinger::new().unwrap();
+            let mut builder = JavaPingConfig::builder();
+            if skip_favicon {
+                builder = builder.skip_favicon();
+            }
+            if skip_sample {
+                builder = builder.skip_sample();
+            }
+            let res = pinger
+                .ping_java_server("127.0.0.1", port, &builder.build())
+                .await
+                .unwrap_or_else(|e| {
+                    panic!("skip_favicon={skip_favicon} skip_sample={skip_sample}: {e:?}")
+                });
+            assert!(
+                res.players.is_none(),
+                "skip_favicon={skip_favicon} skip_sample={skip_sample}"
+            );
+            assert_eq!(res.version.name, "Eldium");
+        }
+    }
+
+    #[tokio::test]
+    async fn ping_loopback_with_null_players() {
+        const BODY: &str = "{\"version\":{\"name\":\"1.20.1\",\"protocol\":775},\"players\":null,\"description\":\"Test\"}";
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(fake_server_with_body(listener, 1, BODY));
+
+        let pinger = MinecraftPinger::new().unwrap();
+        let res = pinger
+            .ping_java_server("127.0.0.1", port, &JavaPingConfig::default())
+            .await
+            .unwrap();
+        assert!(res.players.is_none());
     }
 }

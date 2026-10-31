@@ -17,7 +17,9 @@
 //!         .build();
 //!     let java_config = JavaPingConfig::from(&config).build();
 //!     let status = pinger.ping_java_server("mc.hypixel.net", 25565, &java_config).await.unwrap();
-//!     println!("{}: {}/{}", status.version.name, status.players.online, status.players.max);
+//!     if let Some(players) = &status.players {
+//!         println!("{}: {}/{}", status.version.name, players.online, players.max);
+//!     }
 //! }
 //! ```
 
