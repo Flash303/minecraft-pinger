@@ -118,20 +118,113 @@ pub enum TextComponent {
 struct ComponentObject {
     #[serde(default)]
     text: String,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     hat: Option<bool>,
     player: Option<PlayerField>,
     #[serde(alias = "shadowColor")]
     shadow_color: Option<i32>,
     atlas: Option<String>,
     sprite: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     bold: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     strikethrough: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     obfuscated: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     italic: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
     underlined: Option<bool>,
     font: Option<String>,
     color: Option<String>,
     extra: Option<Vec<TextComponent>>,
+}
+
+/// Some servers/proxies send chat-component flags as `"true"`/`"false"`
+/// strings (or 0/1) instead of JSON booleans, e.g.
+/// `{"text": "Hi", "bold": "false"}`. Accept those shapes; anything else
+/// (including null) maps to `None`/error as before.
+fn deserialize_opt_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct OptBoolVisitor;
+
+    impl<'de> Visitor<'de> for OptBoolVisitor {
+        type Value = Option<bool>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a boolean, \"true\"/\"false\" string, 0/1 or null")
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_bool<E: de::Error>(self, value: bool) -> Result<Self::Value, E> {
+            Ok(Some(value))
+        }
+
+        fn visit_i64<E: de::Error>(self, value: i64) -> Result<Self::Value, E> {
+            match value {
+                0 => Ok(Some(false)),
+                1 => Ok(Some(true)),
+                _ => Err(E::invalid_value(
+                    de::Unexpected::Signed(value),
+                    &"0 or 1",
+                )),
+            }
+        }
+
+        fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
+            match value {
+                0 => Ok(Some(false)),
+                1 => Ok(Some(true)),
+                _ => Err(E::invalid_value(
+                    de::Unexpected::Unsigned(value),
+                    &"0 or 1",
+                )),
+            }
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+            match value.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" => Ok(Some(true)),
+                "false" | "0" => Ok(Some(false)),
+                _ => Err(E::invalid_value(
+                    de::Unexpected::Str(value),
+                    &"\"true\" or \"false\"",
+                )),
+            }
+        }
+
+        fn visit_string<E: de::Error>(self, value: String) -> Result<Self::Value, E> {
+            self.visit_str(&value)
+        }
+
+        fn visit_borrowed_str<E: de::Error>(self, value: &'de str) -> Result<Self::Value, E> {
+            self.visit_str(value)
+        }
+
+        fn visit_bytes<E: de::Error>(self, value: &[u8]) -> Result<Self::Value, E> {
+            let s = std::str::from_utf8(value).map_err(E::custom)?;
+            self.visit_str(s)
+        }
+
+        fn visit_borrowed_bytes<E: de::Error>(
+            self,
+            value: &'de [u8],
+        ) -> Result<Self::Value, E> {
+            let s = std::str::from_utf8(value).map_err(E::custom)?;
+            self.visit_str(s)
+        }
+    }
+
+    deserializer.deserialize_any(OptBoolVisitor)
 }
 
 impl From<ComponentObject> for TextComponent {
@@ -405,5 +498,96 @@ mod tests {
             }
             _ => panic!("Expected component"),
         }
+    }
+
+    fn bool_flag(description: &Description, flag: &str) -> Option<bool> {
+        match description {
+            Description::Component(TextComponent::Object {
+                hat,
+                bold,
+                strikethrough,
+                obfuscated,
+                italic,
+                underlined,
+                ..
+            }) => match flag {
+                "hat" => *hat,
+                "bold" => *bold,
+                "strikethrough" => *strikethrough,
+                "obfuscated" => *obfuscated,
+                "italic" => *italic,
+                "underlined" => *underlined,
+                _ => panic!("unknown flag {flag}"),
+            },
+            _ => panic!("Expected component"),
+        }
+    }
+
+    #[test]
+    fn test_description_bool_flags_accept_string_forms() {
+        // Regression test: some servers send `"bold": "false"` (string)
+        // instead of a boolean, which used to fail with
+        // `invalid type: string "false", expected a boolean`.
+        for flag in [
+            "hat",
+            "bold",
+            "strikethrough",
+            "obfuscated",
+            "italic",
+            "underlined",
+        ] {
+            for (raw, expected) in [
+                ("true", Some(true)),
+                ("false", Some(false)),
+                ("\"true\"", Some(true)),
+                ("\"false\"", Some(false)),
+                ("\"TRUE\"", Some(true)),
+                ("\"False\"", Some(false)),
+                ("\"1\"", Some(true)),
+                ("\"0\"", Some(false)),
+                ("1", Some(true)),
+                ("0", Some(false)),
+                ("null", None),
+            ] {
+                let json = format!(r#"{{"text": "a", "{flag}": {raw}}}"#);
+                let description: Description =
+                    serde_json::from_str(&json).unwrap_or_else(|e| {
+                        panic!("flag {flag} raw {raw} should parse: {e}")
+                    });
+                assert_eq!(
+                    bool_flag(&description, flag),
+                    expected,
+                    "flag {flag} raw {raw}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_description_bool_flags_keep_real_booleans() {
+        let description: Description =
+            serde_json::from_value(json!({"text": "a", "bold": true, "italic": false}))
+                .unwrap();
+        assert_eq!(bool_flag(&description, "bold"), Some(true));
+        assert_eq!(bool_flag(&description, "italic"), Some(false));
+        assert_eq!(bool_flag(&description, "underlined"), None);
+    }
+
+    #[test]
+    fn test_description_bool_flags_reject_garbage() {
+        for raw in ["\"yes\"", "\"\"", "2", "[]", "{}"] {
+            let json = format!(r#"{{"text": "a", "bold": {raw}}}"#);
+            let result: Result<Description, _> = serde_json::from_str(&json);
+            assert!(result.is_err(), "expected error for bold={raw}");
+        }
+    }
+
+    #[test]
+    fn test_java_ping_with_string_bool_in_description() {
+        // End-to-end shape: full status payload with a string flag inside
+        // the MOTD component must not fail the whole ping.
+        let raw = r#"{"version":{"name":"1.20.1","protocol":775},"players":{"online":0,"max":20},"description":{"text":"Hi","bold":"false"}}"#;
+        let ping: crate::java::model::JavaPing = serde_json::from_str(raw).unwrap();
+        assert_eq!(ping.description.to_plain_text(), "Hi");
     }
 }
