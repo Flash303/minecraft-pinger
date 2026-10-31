@@ -381,8 +381,7 @@ mod tests {
 
     #[test]
     fn test_raw_ping_without_players_full() {
-        let ping: JavaPing =
-            serde_json::from_value(skipped_json_without_players()).unwrap();
+        let ping: JavaPing = serde_json::from_value(skipped_json_without_players()).unwrap();
         assert!(ping.players.is_none());
     }
 

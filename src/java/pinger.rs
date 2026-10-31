@@ -218,7 +218,8 @@ mod tests {
         assert_eq!(neither.version.name, "1.20.1");
     }
 
-    const STATUS_BODY_NO_PLAYERS: &str = "{\"version\":{\"name\":\"Eldium\",\"protocol\":766},\"description\":\"play.eldium.fr\"}";
+    const STATUS_BODY_NO_PLAYERS: &str =
+        "{\"version\":{\"name\":\"Eldium\",\"protocol\":766},\"description\":\"play.eldium.fr\"}";
 
     #[tokio::test]
     async fn ping_loopback_without_players() {
@@ -228,11 +229,7 @@ mod tests {
         {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let port = listener.local_addr().unwrap().port();
-            tokio::spawn(fake_server_with_body(
-                listener,
-                1,
-                STATUS_BODY_NO_PLAYERS,
-            ));
+            tokio::spawn(fake_server_with_body(listener, 1, STATUS_BODY_NO_PLAYERS));
 
             let pinger = MinecraftPinger::new().unwrap();
             let mut builder = JavaPingConfig::builder();

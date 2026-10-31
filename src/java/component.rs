@@ -173,10 +173,7 @@ where
             match value {
                 0 => Ok(Some(false)),
                 1 => Ok(Some(true)),
-                _ => Err(E::invalid_value(
-                    de::Unexpected::Signed(value),
-                    &"0 or 1",
-                )),
+                _ => Err(E::invalid_value(de::Unexpected::Signed(value), &"0 or 1")),
             }
         }
 
@@ -184,10 +181,7 @@ where
             match value {
                 0 => Ok(Some(false)),
                 1 => Ok(Some(true)),
-                _ => Err(E::invalid_value(
-                    de::Unexpected::Unsigned(value),
-                    &"0 or 1",
-                )),
+                _ => Err(E::invalid_value(de::Unexpected::Unsigned(value), &"0 or 1")),
             }
         }
 
@@ -215,10 +209,7 @@ where
             self.visit_str(s)
         }
 
-        fn visit_borrowed_bytes<E: de::Error>(
-            self,
-            value: &'de [u8],
-        ) -> Result<Self::Value, E> {
+        fn visit_borrowed_bytes<E: de::Error>(self, value: &'de [u8]) -> Result<Self::Value, E> {
             let s = std::str::from_utf8(value).map_err(E::custom)?;
             self.visit_str(s)
         }
@@ -550,10 +541,8 @@ mod tests {
                 ("null", None),
             ] {
                 let json = format!(r#"{{"text": "a", "{flag}": {raw}}}"#);
-                let description: Description =
-                    serde_json::from_str(&json).unwrap_or_else(|e| {
-                        panic!("flag {flag} raw {raw} should parse: {e}")
-                    });
+                let description: Description = serde_json::from_str(&json)
+                    .unwrap_or_else(|e| panic!("flag {flag} raw {raw} should parse: {e}"));
                 assert_eq!(
                     bool_flag(&description, flag),
                     expected,
@@ -566,8 +555,7 @@ mod tests {
     #[test]
     fn test_description_bool_flags_keep_real_booleans() {
         let description: Description =
-            serde_json::from_value(json!({"text": "a", "bold": true, "italic": false}))
-                .unwrap();
+            serde_json::from_value(json!({"text": "a", "bold": true, "italic": false})).unwrap();
         assert_eq!(bool_flag(&description, "bold"), Some(true));
         assert_eq!(bool_flag(&description, "italic"), Some(false));
         assert_eq!(bool_flag(&description, "underlined"), None);
