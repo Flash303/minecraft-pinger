@@ -6,9 +6,11 @@ use std::net::SocketAddr;
 /// Parsed Java status response plus measured `latency` (ms).
 #[derive(Serialize, Deserialize)]
 pub struct JavaPing {
+    #[serde(default)]
     pub version: Version,
     #[serde(default)]
     pub players: Option<Players>,
+    #[serde(default)]
     pub description: Description,
     #[serde(default)]
     pub favicon: Option<String>,
@@ -26,9 +28,11 @@ pub struct JavaPing {
 // replaced with IgnoredAny to skip their allocation while parsing.
 #[derive(Deserialize)]
 pub(crate) struct RawJavaPing<F, S> {
+    #[serde(default)]
     version: Version,
     #[serde(default)]
     players: Option<RawPlayers<S>>,
+    #[serde(default)]
     description: Description,
     #[serde(default)]
     favicon: F,
@@ -38,7 +42,9 @@ pub(crate) struct RawJavaPing<F, S> {
 
 #[derive(Deserialize)]
 pub(crate) struct RawPlayers<S> {
+    #[serde(default)]
     online: i32,
+    #[serde(default)]
     max: i32,
     #[serde(default)]
     sample: S,
@@ -99,38 +105,58 @@ impl From<RawJavaPing<Option<String>, Option<IgnoredAny>>> for JavaPing {
 }
 
 // Components live in `super::component`, re-exported above.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Version {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub protocol: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Players {
+    #[serde(default)]
     pub online: i32,
+    #[serde(default)]
     pub max: i32,
     #[serde(default)]
     pub sample: Option<Vec<PlayerInfo>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct PlayerInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub id: String,
+}
+
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + serde::Deserialize<'de>,
+{
+    let opt = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ModInfo {
     #[serde(rename = "type", default)]
     pub name: String,
-    #[serde(rename = "modList", default)]
+    #[serde(
+        rename = "modList",
+        default,
+        deserialize_with = "deserialize_null_default"
+    )]
     pub mod_list: Vec<Mod>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Mod {
-    #[serde(rename = "modid")]
+    #[serde(rename = "modid", default)]
     pub mod_id: String,
+    #[serde(default)]
     pub version: String,
 }
 
@@ -421,5 +447,39 @@ mod tests {
         value["players"] = serde_json::Value::Null;
         let ping: JavaPing = serde_json::from_value(value).unwrap();
         assert!(ping.players.is_none());
+    }
+
+    #[test]
+    fn test_maintenance_payload_empty_version_null_modlist() {
+        // Real payload from mc.guill.games (maintenance mode):
+        // `{"description":{...},"version":{},"modinfo":{"type":"","modList":null}}`
+        // Used to fail with `missing field 'name'` at column 97.
+        let raw = r#"{"description":{"extra":[{"color":"red","text":"Serveur en maintenance"}],"text":""},"version":{},"modinfo":{"type":"","modList":null}}"#;
+        let ping: JavaPing = serde_json::from_str(raw).unwrap();
+        assert_eq!(ping.version.name, "");
+        assert_eq!(ping.version.protocol, None);
+        assert_eq!(ping.description.to_plain_text(), "Serveur en maintenance");
+        let mod_info = ping.mod_info.as_ref().expect("modinfo should be present");
+        assert!(mod_info.mod_list.is_empty());
+
+        // Same through the skip paths.
+        let raw_skip: RawJavaPing<Option<IgnoredAny>, Option<IgnoredAny>> =
+            serde_json::from_str(raw).unwrap();
+        let ping = JavaPing::from(raw_skip);
+        assert_eq!(ping.version.name, "");
+    }
+
+    #[test]
+    fn test_version_missing_name_defaults() {
+        let version: Version = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(version.name, "");
+        assert_eq!(version.protocol, None);
+    }
+
+    #[test]
+    fn test_players_online_max_default() {
+        let players: Players = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(players.online, 0);
+        assert_eq!(players.max, 0);
     }
 }

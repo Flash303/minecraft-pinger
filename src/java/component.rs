@@ -12,6 +12,12 @@ pub enum Description {
     Component(TextComponent),
 }
 
+impl Default for Description {
+    fn default() -> Self {
+        Description::Plain(String::new())
+    }
+}
+
 impl<'de> Deserialize<'de> for Description {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         deserializer.deserialize_any(DescriptionVisitor)
@@ -332,9 +338,11 @@ pub struct Player {
     pub properties: Option<Vec<Property>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Property {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub value: String,
 }
 
